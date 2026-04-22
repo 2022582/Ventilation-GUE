@@ -2,290 +2,208 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <!-- 모바일 확대 방지 및 안전 영역 설정 -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>급식실 배기장치 스마트 점검 앱</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>국소배기 전문가용 진단 앱</title>
   
-  <!-- CDN 로드 -->
   <script src="https://cdn.tailwindcss.com"></script>
+  
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
-  <!-- ✅ PDF 생성을 위한 html2pdf.js 추가 -->
+  <!-- PDF 생성 라이브러리 추가 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
-    body { font-family: 'Noto Sans KR', sans-serif; }
-    
-    /* 완벽한 A4 출력을 위한 Print CSS */
+    /* 인쇄(A4) 및 PDF 최적화 */
     @media print {
-      @page { size: A4 portrait; margin: 10mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; }
-      .no-print { display: none !important; }
-      html, body, #root { height: auto !important; overflow: visible !important; }
-      .page-break-inside-avoid { page-break-inside: avoid; break-inside: avoid; }
-      .page-break-before { page-break-before: always; }
+      @page {
+        size: A4 portrait;
+        margin: 15mm;
+      }
+      body { 
+        -webkit-print-color-adjust: exact; 
+        print-color-adjust: exact; 
+        background-color: white !important; 
+      }
+      /* 🖨️ 인쇄 시 빈 화면 방지를 위한 강제 레이아웃 초기화 */
+      html, body, #root, .print-force-block {
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        display: block !important;
+        position: static !important;
+      }
+      .print-hide { display: none !important; }
+      
+      .page-break-inside-avoid { 
+        page-break-inside: avoid; 
+        break-inside: avoid; 
+      }
       ::-webkit-scrollbar { display: none; }
-      .print-border { border-color: #cbd5e1 !important; }
     }
-
-    /* 스크롤바 커스텀 */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    
-    /* 모바일 하단 네비게이션 여백 */
-    .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-    
-    /* PDF 변환 전용 폰트 렌더링 강제 (html2canvas 호환성) */
-    #report-container { font-family: 'Noto Sans KR', sans-serif !important; }
+    /* SVG 터치 스크롤 방지 */
+    .touch-none-svg {
+      touch-action: none;
+    }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased overflow-hidden print:overflow-visible">
+<body class="bg-slate-100 text-slate-800 font-sans">
   
-  <div id="root" class="h-screen w-full print:h-auto print:w-auto"></div>
+  <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useRef, useEffect, useMemo } = React;
 
-    // --- 아이콘 컴포넌트 (SVG 직접 구현) ---
-    const ChefHat = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-4a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v4"/><path d="M5 11c-.5 0-1-.5-1-1a3 3 0 0 1 6 0c0 .5-.5 1-1 1"/><path d="M19 11c.5 0 1-.5 1-1a3 3 0 0 0-6 0c0 .5.5 1 1 1"/><path d="M12 11c.5 0 1-.5 1-1a4 4 0 0 0-8 0c0 .5.5 1 1 1"/><path d="M12 11c-.5 0-1-.5-1-1a4 4 0 0 1 8 0c0 .5-.5 1-1 1"/></svg>;
+    // 아이콘 컴포넌트
+    const Factory = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>;
     const MousePointer2 = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg>;
-    const FanIcon = ({className, x, y, width, height}) => <svg className={className||""} x={x} y={y} width={width||24} height={height||24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.827 16.379a6.082 6.082 0 0 1-8.618-7.002l5.412 1.45a6.082 6.082 0 0 1 7.002-8.618l-1.45 5.412a6.082 6.082 0 0 1 8.618 7.002l-5.412-1.45a6.082 6.082 0 0 1-7.002 8.618l1.45-5.412Z"/><path d="M12 12v.01"/></svg>;
-    const SquareIcon = ({className, x, y, width, height}) => <svg className={className||""} x={x} y={y} width={width||24} height={height||24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg>;
-    const MinusIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/></svg>;
+    const Fan = ({className, x, y, width, height}) => <svg className={className||""} x={x} y={y} width={width||24} height={height||24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.827 16.379a6.082 6.082 0 0 1-8.618-7.002l5.412 1.45a6.082 6.082 0 0 1 7.002-8.618l-1.45 5.412a6.082 6.082 0 0 1 8.618 7.002l-5.412-1.45a6.082 6.082 0 0 1-7.002 8.618l1.45-5.412Z"/><path d="M12 12v.01"/></svg>;
+    const Square = ({className, x, y, width, height}) => <svg className={className||""} x={x} y={y} width={width||24} height={height||24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg>;
+    const Minus = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/></svg>;
     const Trash2 = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
-    const CameraIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>;
+    const Camera = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>;
+    const CheckCircle2 = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>;
     const XCircle = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>;
-    const PrinterIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>;
-    const FileCheckIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>;
-    const FactoryIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>;
-    const SaveIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
-    const UploadIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
-    const SendIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>;
-    const DownloadIcon = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
-    const SpinnerIcon = ({className}) => <svg className={`animate-spin ${className||""}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>;
+    const Printer = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>;
+    const Activity = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>;
+    const Download = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
+    const Upload = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
+    const Share2 = ({className}) => <svg className={className||""} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>;
 
-    // --- 상수 데이터 ---
-    const KITCHEN_HOOD_TYPES = {
-      'rice': { label: '밥솥', vel: 0.5 },
-      'soup': { label: '국솥', vel: 0.5 },
-      'prep': { label: '조리대', vel: 0.7 },
-      'oven': { label: '오븐', vel: 0.5 },
-      'dish': { label: '세척기', vel: 0.7 },
-      'fry': { label: '튀김/부침기', vel: 0.7 },
-      'other': { label: '기타', vel: 0.5 }
-    };
-
-    // --- 메인 애플리케이션 컴포넌트 ---
     function App() {
-      // 모바일 탭 및 로딩 상태 관리
-      const [mobileTab, setMobileTab] = useState('input');
-      const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-
-      // 기본 상태
-      const [workplaceName, setWorkplaceName] = useState("");
-      const [representative, setRepresentative] = useState("");
-      const [location, setLocation] = useState("");
+      // 기본 정보
+      const [factoryName, setFactoryName] = useState("");
+      const [representativeName, setRepresentativeName] = useState("");
+      const [address, setAddress] = useState("");
       const [useLayout, setUseLayout] = useState(true); 
+      const [overallReview, setOverallReview] = useState(""); // 추가: 점검자 종합 의견
       
-      // 도면 데이터 상태
+      // 도면 데이터
       const [nodes, setNodes] = useState([]);
-      const [edges, setEdges] = useState([]);
-      const [guides, setGuides] = useState([]); 
-
-      // 에디터 툴 상태
+      const [edges, setEdges] = useState([]); 
+      
+      // 도구 및 상태
       const [tool, setTool] = useState("select"); 
       const [selectedNodeId, setSelectedNodeId] = useState(null);
       const [selectedEdgeId, setSelectedEdgeId] = useState(null);
       const [draggingNodeId, setDraggingNodeId] = useState(null);
+      const [draggingEdgeId, setDraggingEdgeId] = useState(null);
       const [drawingEdge, setDrawingEdge] = useState(null);
+      
+      // 모바일 & 부가 기능 상태
+      const [mobileTab, setMobileTab] = useState('edit'); // 'edit' | 'report'
+      const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+      
       const svgRef = useRef(null);
+      const fileInputRef = useRef(null);
 
-      // 종합 평가표 상태
-      const [checklist, setChecklist] = useState({
-        size: { status: '양호', remark: '', improvement: '' },
-        duct: { status: '양호', remark: '', improvement: '' },
-        height: { status: '양호', remark: '', improvement: '' },
-        velocity: { remark: '', improvement: '' },
-        volume: { remark: '', improvement: '' }
-      });
-
-      const [overallReview, setOverallReview] = useState("");
-
-      // --- 핸들러 함수들 ---
-      const handleChecklistChange = (category, field, value) => {
-        setChecklist(prev => ({ ...prev, [category]: { ...prev[category], [field]: value } }));
+      /* 데이터 파일 저장/불러오기 로직 */
+      const handleSaveFile = () => {
+        const data = { factoryName, representativeName, address, useLayout, overallReview, nodes, edges };
+        const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `국소배기_진단데이터_${factoryName || '사업장'}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
       };
 
-      const handleSave = () => {
-        const dataToSave = { workplaceName, representative, location, useLayout, nodes, edges, checklist, overallReview };
-        const jsonString = JSON.stringify(dataToSave, null, 2);
-        const blob = new Blob([jsonString], { type: "application/json" });
-        const href = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = href;
-        link.download = `${workplaceName || "급식실_스마트점검"}_데이터.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      };
-
-      const handleLoad = (event) => {
-        const file = event.target.files[0];
+      const handleFileUpload = (e) => {
+        const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = (event) => {
           try {
-            const loadedData = JSON.parse(e.target.result);
-            if (loadedData.workplaceName !== undefined) setWorkplaceName(loadedData.workplaceName);
-            if (loadedData.representative !== undefined) setRepresentative(loadedData.representative);
-            if (loadedData.location !== undefined) setLocation(loadedData.location);
-            if (loadedData.useLayout !== undefined) setUseLayout(loadedData.useLayout);
-            if (loadedData.nodes) setNodes(loadedData.nodes);
-            if (loadedData.edges) setEdges(loadedData.edges);
-            if (loadedData.checklist) setChecklist(loadedData.checklist);
-            if (loadedData.overallReview !== undefined) setOverallReview(loadedData.overallReview);
-            
-            setSelectedNodeId(null);
-            setSelectedEdgeId(null);
-            setGuides([]);
-            alert("데이터를 성공적으로 불러왔습니다!");
-          } catch (error) {
-            alert("파일 형식이 올바르지 않거나 손상되었습니다.");
+            const data = JSON.parse(event.target.result);
+            if (data && data.nodes) {
+              setFactoryName(data.factoryName || "");
+              setRepresentativeName(data.representativeName || "");
+              setAddress(data.address || "");
+              setOverallReview(data.overallReview || "");
+              setUseLayout(data.useLayout !== false);
+              setNodes(data.nodes || []);
+              setEdges(data.edges || []);
+              alert("데이터를 성공적으로 불러왔습니다.");
+            } else {
+              alert("유효하지 않은 데이터 양식입니다.");
+            }
+          } catch(err) {
+            alert("파일 읽기 실패: 올바른 JSON 파일이 아닙니다.");
           }
+          if (fileInputRef.current) fileInputRef.current.value = '';
         };
         reader.readAsText(file);
-        event.target.value = null;
       };
 
-      // 핵심 로직: 후드 평가 및 산출 (조기 선언하여 메일 요약에서도 사용)
-      const calculateResult = (data) => {
-        const w = parseFloat(data.width) || 0;
-        const h = parseFloat(data.height) || 0;
-        let area = w * h;
-        const vc = parseFloat(data.controlVelocity) || 0;
-        const vm = parseFloat(data.measuredVelocity) || 0;
+      /* PDF 생성 및 모바일 카카오톡/앱 공유 로직 */
+      const handleSharePDF = async () => {
+        setMobileTab('report'); // 모바일에서 '입력' 탭일 때 캡처하면 빈 화면이 나오는 현상 방지
+        setIsGeneratingPDF(true);
         
-        let requiredQ = area * vc * 60; 
-        const currentQ = area * vm * 60;
+        // UI 렌더링 후 PDF 생성을 위해 약간의 딜레이
+        setTimeout(async () => {
+          const element = document.getElementById('report-content-wrapper');
+          const opt = {
+            margin:       10,
+            filename:     `국소배기보고서_${factoryName || '사업장'}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, windowWidth: 1024 }, // 모바일에서도 A4 비율 붕괴 방지
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
 
-        const isVelocityGood = vm >= vc; 
-        const isVolumeGood = currentQ >= requiredQ;
-        const isGood = isVelocityGood && isVolumeGood && currentQ > 0;
-
-        const ew = parseFloat(data.equipWidth) || 0;
-        const eh = parseFloat(data.equipHeight) || 0;
-        const hd = parseFloat(data.hoodDepth) || 0;
-        
-        let isSizeGood = true;
-        let sizeBadReason = [];
-        if (ew > 0 && w < ew + 0.15) { isSizeGood = false; sizeBadReason.push("가로 돌출폭 부족"); }
-        if (eh > 0 && h < eh + 0.15) { isSizeGood = false; sizeBadReason.push("세로 돌출폭 부족"); }
-        if (hd > 0 && hd < 0.6) { isSizeGood = false; sizeBadReason.push("깊이 60cm 미달"); }
-
-        const hb = parseFloat(data.hoodBottomHeight) || 0;
-        const isHeightGood = hb > 0 && hb <= 1.2;
-
-        const dCount = parseInt(data.ductCount) || 1;
-        const reqDuctCount = Math.ceil(w / 1.8);
-        const isDuctGood = w > 0 ? (dCount >= reqDuctCount) : true;
-
-        return { 
-          area: area.toFixed(2), 
-          requiredQ: requiredQ.toFixed(1), currentQ: currentQ.toFixed(1), 
-          isVelocityGood, isVolumeGood, isGood,
-          isSizeGood, sizeBadReason: sizeBadReason.join(', '),
-          isHeightGood, isDuctGood, reqDuctCount
-        };
-      };
-
-      const hoodsData = useMemo(() => {
-        return nodes.filter(n => n.type === 'hood').map(n => {
-          return { ...n, calc: calculateResult(n.data) };
-        });
-      }, [nodes]);
-
-      const evalData = useMemo(() => {
-        if (hoodsData.length === 0) return { sizeStatus: '-', sizeTarget: '', ductStatus: '-', ductTarget: '', heightStatus: '-', heightTarget: '', velStatus: '-', velTarget: '', volStatus: '-', volTarget: '' };
-
-        const badSizeHoods = hoodsData.filter(h => !h.calc.isSizeGood && (h.data.equipWidth || h.data.hoodDepth)).map(h => `${h.data.processName}(${h.calc.sizeBadReason})`).join(', ');
-        const badDuctHoods = hoodsData.filter(h => !h.calc.isDuctGood && h.data.width).map(h => h.data.processName).join(', ');
-        const badHeightHoods = hoodsData.filter(h => !h.calc.isHeightGood && h.data.hoodBottomHeight).map(h => h.data.processName).join(', ');
-        const badVelHoods = hoodsData.filter(h => !h.calc.isVelocityGood).map(h => h.data.processName).join(', ');
-        const badVolHoods = hoodsData.filter(h => !h.calc.isVolumeGood).map(h => h.data.processName).join(', ');
-        
-        return {
-          sizeStatus: badSizeHoods ? '미흡' : '양호',
-          sizeTarget: badSizeHoods ? `[미흡: ${badSizeHoods}]` : '',
-          ductStatus: badDuctHoods ? '미흡' : '양호',
-          ductTarget: badDuctHoods ? `[미흡: ${badDuctHoods}]` : '',
-          heightStatus: badHeightHoods ? '미흡' : '양호',
-          heightTarget: badHeightHoods ? `[미흡: ${badHeightHoods}]` : '',
-          velStatus: badVelHoods ? '미흡' : '양호',
-          velTarget: badVelHoods ? `[미흡: ${badVelHoods}]` : '',
-          volStatus: badVolHoods ? '미흡' : '양호',
-          volTarget: badVolHoods ? `[미흡: ${badVolHoods}]` : '',
-        };
-      }, [hoodsData]);
-
-      // ✅ PDF 변환 및 공유/다운로드 통합 로직 ✅
-      const handlePdfAction = async (actionType) => {
-        const element = document.getElementById('report-container');
-        if (!element) return;
-        
-        // PDF 생성 중 로딩 오버레이 띄우기
-        setIsGeneratingPdf(true);
-
-        const fileName = `${workplaceName || '작업장'}_성능평가결과.pdf`;
-        const opt = {
-          margin:       10,
-          filename:     fileName,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, logging: false },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak:    { avoid: '.page-break-inside-avoid' }
-        };
-
-        try {
-          if (actionType === 'download') {
-            // PDF 바로 다운로드
-            await html2pdf().set(opt).from(element).save();
-          } 
-          else if (actionType === 'share') {
-            // PDF를 Blob(파일) 형태로 생성하여 모바일 네이티브 공유 호출
-            const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
-            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+          try {
+            // PDF Blob 생성
+            const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+            const file = new File([pdfBlob], opt.filename, { type: 'application/pdf' });
             
-            const reportText = `[국소배기장치 성능평가 점검 결과 요약]\n- 사업장명: ${workplaceName || '미입력'}\n- 제어풍속 만족: ${evalData.velStatus}\n- 필요배기량 만족: ${evalData.volStatus}\n\n상세한 점검 결과는 첨부된 PDF 파일을 확인해주세요.`;
-
-            // 브라우저가 파일 공유를 지원하는지 체크 (주로 모바일 환경)
+            // 모바일 Web Share API (카카오톡, 메일 전송 등)
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
               await navigator.share({
-                title: `${workplaceName || '작업장'} 점검결과`,
-                text: reportText,
+                title: '국소배기장치 성능평가 보고서',
+                text: `${factoryName || '사업장'} 국소배기장치 성능평가 보고서입니다.`,
                 files: [file]
               });
             } else {
-              // 파일 공유를 지원하지 않는 기기(PC 등) 처리 방안
-              alert("현재 브라우저는 파일 직접 공유를 지원하지 않아 PDF가 자동 다운로드됩니다. 다운로드된 파일을 이메일/메신저에 직접 첨부해주세요.");
-              await html2pdf().set(opt).from(element).save();
+              // Share API 미지원 브라우저/PC의 경우 단순 다운로드
+              html2pdf().set(opt).from(element).save();
             }
+          } catch(err) {
+            console.error(err);
+            alert("PDF 생성 중 오류가 발생했습니다.");
+          } finally {
+            setIsGeneratingPDF(false);
           }
-        } catch (error) {
-          console.error("PDF 처리 중 오류 발생:", error);
-          alert("문서를 처리하는 도중 오류가 발생했습니다.");
-        } finally {
-          setIsGeneratingPdf(false); // 로딩 종료
+        }, 100);
+      };
+
+      // 🖨️ 인쇄 기능 (빈 화면 방지를 위해 탭 전환 후 실행)
+      const handlePrint = () => {
+        setMobileTab('report');
+        setTimeout(() => {
+          window.print();
+        }, 150);
+      };
+
+      // 법정 제어풍속 자동 산출 로직
+      const getAutoControlVelocity = (type, state, isPermitted) => {
+        if (type === 'enclosure' && isPermitted) return state === 'gas' ? 0.5 : 1.0;
+        if (state === 'gas') {
+          if (type === 'enclosure') return 0.4;
+          if (type === 'ext_up') return 1.0;
+          return 0.5;
+        } else {
+          if (type === 'enclosure') return 0.7;
+          if (type === 'ext_up') return 1.2;
+          return 1.0;
         }
       };
 
-      // SVG 좌표 계산
+      // 마우스/터치 위치 좌표 계산
       const getMousePos = (e) => {
-        if (!useLayout || !svgRef.current) return { rawX: 0, rawY: 0 };
+        if (!useLayout || !svgRef.current) return { rawX: 0, rawY: 0, x: 0, y: 0 };
         const svg = svgRef.current;
         const CTM = svg.getScreenCTM();
         let clientX = e.clientX, clientY = e.clientY;
@@ -294,65 +212,73 @@
         }
         const rawX = (clientX - CTM.e) / CTM.a;
         const rawY = (clientY - CTM.f) / CTM.d;
-        return { rawX, rawY };
+        return { rawX, rawY, x: Math.round((rawX - 10) / 20) * 20 + 10, y: Math.round((rawY - 10) / 20) * 20 + 10 };
       };
 
-      // 도면 객체 생성 로직
-      const createHood = (x = 110, y = 110) => {
-        const hoodNum = nodes.filter(n => n.type === 'hood').length + 1;
-        const newNode = {
-          id: `hood-${Date.now()}`, type: 'hood', x, y,
-          data: {
-            processName: `조리대-${hoodNum}`, photo: null, kHoodType: "prep", 
-            controlVelocity: 0.7, measuredVelocity: "", 
-            width: "", height: "", manualFanName: "", remarks: "",
-            equipWidth: "", equipHeight: "", hoodDepth: "", hoodBottomHeight: "", ductCount: "1"
-          }
-        };
-        setNodes(prev => [...prev, newNode]); setSelectedNodeId(newNode.id); setSelectedEdgeId(null);
-      };
-
-      const createFan = (x = 210, y = 110) => {
-        const newNode = {
-          id: `fan-${Date.now()}`, type: 'fan', x, y,
-          data: { 
-            fanName: `송풍기-${nodes.filter(n => n.type === 'fan').length + 1}`, 
-            photo: null, 
-            ratedQ: "", ratedSP: "", measuredQ: "", measuredSP: "" 
-          }
-        };
-        setNodes(prev => [...prev, newNode]); setSelectedNodeId(newNode.id); setSelectedEdgeId(null);
-      };
-
-      // 배관 스냅핑 타겟 찾기
       const findSnapTarget = (rawX, rawY, excludeNodeId) => {
-        const nearbyNodes = nodes.filter(n => n.id !== excludeNodeId && Math.abs(n.x - rawX) < 25 && Math.abs(n.y - rawY) < 25);
+        const nearbyNodes = nodes.filter(n => n.id !== excludeNodeId && Math.abs(n.x - rawX) < 20 && Math.abs(n.y - rawY) < 20);
         if (nearbyNodes.length > 0) {
           const mainNode = nearbyNodes.find(n => n.type !== 'joint');
           const snapNode = mainNode || nearbyNodes[0];
           return { type: 'node', node: snapNode, x: snapNode.x, y: snapNode.y };
         }
+        for (let e of edges) {
+          if (e.from === excludeNodeId || e.to === excludeNodeId) continue;
+          const fromNode = nodes.find(n => n.id === e.from);
+          const toNode = nodes.find(n => n.id === e.to);
+          if (!fromNode || !toNode) continue;
+          const isHorizontal = Math.abs(fromNode.y - toNode.y) < 1;
+          const isVertical = Math.abs(fromNode.x - toNode.x) < 1;
+          if (isHorizontal && rawX >= Math.min(fromNode.x, toNode.x) && rawX <= Math.max(fromNode.x, toNode.x) && Math.abs(rawY - fromNode.y) < 20) 
+            return { type: 'edge', edge: e, x: Math.round((rawX - 10) / 20) * 20 + 10, y: fromNode.y };
+          else if (isVertical && rawY >= Math.min(fromNode.y, toNode.y) && rawY <= Math.max(fromNode.y, toNode.y) && Math.abs(rawX - fromNode.x) < 20) 
+            return { type: 'edge', edge: e, x: fromNode.x, y: Math.round((rawY - 10) / 20) * 20 + 10 };
+        }
         return null;
       };
 
-      // 도면 인터랙션 이벤트
+      const createHood = (x = 110, y = 110) => {
+        const newNode = {
+          id: `hood-${Date.now()}`, type: 'hood', x, y,
+          data: {
+            processName: `공정-${nodes.filter(n => n.type === 'hood').length + 1}`, photo: null, 
+            hoodType: "enclosure", materialState: "gas", isPermitted: false, distanceX: 0, 
+            controlVelocity: 0.4, measuredControlVelocity: "", shape: "rect",
+            width: "", height: "", diameter: "", measuredVelocity: "",
+            openingWidth: "", openingHeight: "", 
+            manualFanName: ""
+          }
+        };
+        setNodes([...nodes, newNode]);
+        setSelectedNodeId(newNode.id);
+      };
+
+      const createFan = (x = 210, y = 110) => {
+        const newNode = {
+          id: `fan-${Date.now()}`, type: 'fan', x, y,
+          data: {
+            fanName: `송풍기-${nodes.filter(n => n.type === 'fan').length + 1}`,
+            ratedQ: "", ratedSP: "", measuredQ: "", measuredSP: ""
+          }
+        };
+        setNodes([...nodes, newNode]);
+        setSelectedNodeId(newNode.id);
+      };
+
       const handlePointerDown = (e) => {
         if (!useLayout) return;
-        const { rawX, rawY } = getMousePos(e);
-        const x = Math.round((rawX - 10) / 20) * 20 + 10;
-        const y = Math.round((rawY - 10) / 20) * 20 + 10;
-        
-        if (tool === 'select') { 
-          setSelectedNodeId(null); setSelectedEdgeId(null); 
-        } else if (tool === 'hood') { 
-          createHood(x, y); setTool('select'); 
-        } else if (tool === 'fan') { 
-          createFan(x, y); setTool('select'); 
+        const { x, y } = getMousePos(e);
+        if (tool === 'select') {
+          setSelectedNodeId(null); setSelectedEdgeId(null);
+        } else if (tool === 'hood') {
+          createHood(x, y); setTool('select');
+        } else if (tool === 'fan') {
+          createFan(x, y); setTool('select');
         } else if (tool === 'line') {
-          const snapTarget = findSnapTarget(rawX, rawY, null);
-          let startNodeId = snapTarget ? snapTarget.node.id : (() => {
+          const snapTarget = findSnapTarget(x, y, null);
+          let startNodeId = snapTarget && snapTarget.type === 'node' ? snapTarget.node.id : (() => {
             const n = { id: `joint-${Date.now()}`, type: 'joint', x, y, data: {} };
-            setNodes(prev => [...prev, n]); return n.id;
+            setNodes([...nodes, n]); return n.id;
           })();
           setDrawingEdge({ startNodeId, x, y, cornerX: null, cornerY: null, snapTarget: null });
         }
@@ -360,94 +286,86 @@
 
       const handlePointerMove = (e) => {
         if (!useLayout) return;
-        let { rawX, rawY } = getMousePos(e);
-        let snappedX = Math.round((rawX - 10) / 20) * 20 + 10;
-        let snappedY = Math.round((rawY - 10) / 20) * 20 + 10;
-        let activeGuides = [];
-
-        const checkAlignment = (excludeId) => {
-          let foundX = false, foundY = false;
-          nodes.forEach(n => {
-            if (n.id === excludeId) return;
-            if (!foundX && Math.abs(rawX - n.x) < 15) { snappedX = n.x; activeGuides.push({ axis: 'x', value: n.x }); foundX = true; }
-            if (!foundY && Math.abs(rawY - n.y) < 15) { snappedY = n.y; activeGuides.push({ axis: 'y', value: n.y }); foundY = true; }
-          });
-        };
+        let { x, y, rawX, rawY } = getMousePos(e);
 
         if (draggingNodeId) {
-          checkAlignment(draggingNodeId); setGuides(activeGuides);
-          setNodes(prev => prev.map(n => n.id === draggingNodeId ? { ...n, x: snappedX, y: snappedY } : n)); 
+          setNodes(prev => prev.map(n => n.id === draggingNodeId ? { ...n, x, y } : n)); return;
+        }
+        if (draggingEdgeId) {
+          const edge = edges.find(ed => ed.id === draggingEdgeId);
+          if (!edge) return;
+          const fromNode = nodes.find(n => n.id === edge.from), toNode = nodes.find(n => n.id === edge.to);
+          if (!fromNode || !toNode) return;
+          if (Math.abs(fromNode.y - toNode.y) < 1) setNodes(prev => prev.map(n => (n.id === edge.from || n.id === edge.to) ? { ...n, y } : n));
+          else if (Math.abs(fromNode.x - toNode.x) < 1) setNodes(prev => prev.map(n => (n.id === edge.from || n.id === edge.to) ? { ...n, x } : n));
           return;
         }
-        
-        if (drawingEdge) {
-          checkAlignment(drawingEdge.startNodeId); setGuides(activeGuides);
-          const startNode = nodes.find(n => n.id === drawingEdge.startNodeId);
-          if (!startNode) return;
 
-          const isHorizontal = Math.abs(rawX - startNode.x) > Math.abs(rawY - startNode.y);
-          let currentX = isHorizontal ? snappedX : startNode.x;
-          let currentY = isHorizontal ? startNode.y : snappedY;
-          let cornerX = null, cornerY = null;
-          let snapTarget = findSnapTarget(rawX, rawY, startNode.id);
-
-          if (snapTarget) {
-            currentX = snapTarget.x; currentY = snapTarget.y;
-            if (startNode.x !== currentX && startNode.y !== currentY) {
-              cornerX = isHorizontal ? currentX : startNode.x; 
-              cornerY = isHorizontal ? startNode.y : currentY;
-            }
-          }
-          setDrawingEdge({ ...drawingEdge, x: currentX, y: currentY, cornerX, cornerY, snapTarget });
-          return;
-        }
-        setGuides([]); 
-      };
-
-      const handlePointerUp = (e) => {
-        if (!useLayout) return;
-        setGuides([]);
-        if (draggingNodeId) { setDraggingNodeId(null); return; }
         if (!drawingEdge) return;
-        
-        let { rawX, rawY } = getMousePos(e);
         const startNode = nodes.find(n => n.id === drawingEdge.startNodeId);
         if (!startNode) return;
 
         const isHorizontal = Math.abs(rawX - startNode.x) > Math.abs(rawY - startNode.y);
-        let currentX = isHorizontal ? Math.round((rawX - 10) / 20) * 20 + 10 : startNode.x;
-        let currentY = isHorizontal ? startNode.y : Math.round((rawY - 10) / 20) * 20 + 10;
+        let currentX = isHorizontal ? x : startNode.x, currentY = isHorizontal ? startNode.y : y;
+        let cornerX = null, cornerY = null, snapTarget = findSnapTarget(rawX, rawY, startNode.id);
+
+        if (snapTarget) {
+          currentX = snapTarget.x; currentY = snapTarget.y;
+          if (startNode.x !== currentX && startNode.y !== currentY) {
+            cornerX = isHorizontal ? currentX : startNode.x; cornerY = isHorizontal ? startNode.y : currentY;
+          }
+        }
+        setDrawingEdge({ ...drawingEdge, x: currentX, y: currentY, cornerX, cornerY, snapTarget });
+      };
+
+      const handlePointerUp = (e) => {
+        if (!useLayout) return;
+        if (draggingNodeId || draggingEdgeId) { setDraggingNodeId(null); setDraggingEdgeId(null); return; }
+        if (!drawingEdge) return;
+        
+        let { x, y, rawX, rawY } = getMousePos(e);
+        const startNode = nodes.find(n => n.id === drawingEdge.startNodeId);
+        if (!startNode) return;
+
+        const isHorizontal = Math.abs(rawX - startNode.x) > Math.abs(rawY - startNode.y);
+        let currentX = isHorizontal ? x : startNode.x, currentY = isHorizontal ? startNode.y : y;
         let cornerX = null, cornerY = null;
         let finalSnapTarget = findSnapTarget(rawX, rawY, startNode.id);
 
         if (finalSnapTarget) {
           currentX = finalSnapTarget.x; currentY = finalSnapTarget.y;
           if (startNode.x !== currentX && startNode.y !== currentY) {
-            cornerX = isHorizontal ? currentX : startNode.x; cornerY = isHorizontal ? startNode.y : currentY;
+            cornerX = isHorizontal ? currentX : startNode.x; 
+            cornerY = isHorizontal ? startNode.y : currentY;
           }
         }
 
         let newNodes = [...nodes], newEdges = [...edges], lastEndId = startNode.id;
-        
+
         if (cornerX !== null) {
           const cornerNode = { id: `joint-${Date.now()}-c`, type: 'joint', x: cornerX, y: cornerY, data: {} };
-          newNodes.push(cornerNode); 
-          newEdges.push({ id: `edge-${Date.now()}-c`, from: lastEndId, to: cornerNode.id });
+          newNodes.push(cornerNode); newEdges.push({ id: `edge-${Date.now()}-c`, from: lastEndId, to: cornerNode.id });
           lastEndId = cornerNode.id;
         }
 
         let targetNodeId;
         if (finalSnapTarget) {
-          targetNodeId = finalSnapTarget.node.id;
+          if (finalSnapTarget.type === 'node') targetNodeId = finalSnapTarget.node.id;
+          else {
+            const splitEdge = finalSnapTarget.edge;
+            const splitJoint = { id: `joint-${Date.now()}-s`, type: 'joint', x: currentX, y: currentY, data: {} };
+            newNodes.push(splitJoint);
+            newEdges = newEdges.filter(e => e.id !== splitEdge.id);
+            newEdges.push({ id: `edge-${Date.now()}-s1`, from: splitEdge.from, to: splitJoint.id });
+            newEdges.push({ id: `edge-${Date.now()}-s2`, from: splitJoint.id, to: splitEdge.to });
+            targetNodeId = splitJoint.id;
+          }
         } else {
           const endJoint = { id: `joint-${Date.now()}-e`, type: 'joint', x: currentX, y: currentY, data: {} };
-          newNodes.push(endJoint); 
-          targetNodeId = endJoint.id;
+          newNodes.push(endJoint); targetNodeId = endJoint.id;
         }
-        
-        if (lastEndId !== targetNodeId) {
-          newEdges.push({ id: `edge-${Date.now()}-e`, from: lastEndId, to: targetNodeId });
-        }
+
+        if (lastEndId !== targetNodeId) newEdges.push({ id: `edge-${Date.now()}-e`, from: lastEndId, to: targetNodeId });
 
         setNodes(newNodes); setEdges(newEdges); setDrawingEdge(null); setTool('select');
       };
@@ -455,9 +373,8 @@
       const handleNodePointerDown = (e, id) => {
         if (!useLayout) return;
         e.stopPropagation();
-        if (tool === 'select') { 
-          setSelectedEdgeId(null); setSelectedNodeId(id); setDraggingNodeId(id); 
-        } else if (tool === 'line' && !drawingEdge) {
+        if (tool === 'select') { setSelectedEdgeId(null); setSelectedNodeId(id); setDraggingNodeId(id); } 
+        else if (tool === 'line' && !drawingEdge) {
           const node = nodes.find(n => n.id === id);
           setDrawingEdge({ startNodeId: id, x: node.x, y: node.y, cornerX: null, cornerY: null, snapTarget: null });
         }
@@ -466,9 +383,7 @@
       const handleEdgePointerDown = (e, id) => {
         if (!useLayout) return;
         e.stopPropagation();
-        if (tool === 'select') { 
-          setSelectedNodeId(null); setSelectedEdgeId(id); 
-        }
+        if (tool === 'select') { setSelectedNodeId(null); setSelectedEdgeId(id); setDraggingEdgeId(id); }
       };
 
       const deleteSelected = () => {
@@ -477,19 +392,19 @@
           setEdges(edges.filter(e => e.from !== selectedNodeId && e.to !== selectedNodeId));
           setSelectedNodeId(null);
         } else if (selectedEdgeId) {
-          setEdges(edges.filter(e => e.id !== selectedEdgeId)); 
+          setEdges(edges.filter(e => e.id !== selectedEdgeId));
           setSelectedEdgeId(null);
         }
       };
 
       const updateNodeData = (field, value) => {
         if (!selectedNodeId) return;
-        setNodes(prevNodes => prevNodes.map(n => {
+        setNodes(nodes.map(n => {
           if (n.id === selectedNodeId) {
             let newData = { ...n.data, [field]: value };
-            if (field === 'kHoodType') {
-              newData.controlVelocity = KITCHEN_HOOD_TYPES[value].vel;
-              newData.processName = `${KITCHEN_HOOD_TYPES[value].label}-${prevNodes.filter(x => x.type === 'hood').length}`;
+            if (field === 'hoodType' && value !== 'enclosure') newData.isPermitted = false;
+            if (['hoodType', 'materialState', 'isPermitted'].includes(field) || (field === 'hoodType' && newData.isPermitted)) {
+              newData.controlVelocity = getAutoControlVelocity(newData.hoodType, newData.materialState, newData.isPermitted || false);
             }
             return { ...n, data: newData };
           }
@@ -506,508 +421,545 @@
         }
       };
 
+      // 데이터 계산 로직
+      const calculateResult = (data) => {
+        const { hoodType, distanceX, controlVelocity, measuredControlVelocity, shape, width, height, diameter, measuredVelocity, openingWidth, openingHeight } = data;
+        let area = shape === 'rect' ? (parseFloat(width) || 0) * (parseFloat(height) || 0) : Math.PI * Math.pow(((parseFloat(diameter) || 0) / 1000) / 2, 2);
+        const vc = parseFloat(controlVelocity) || 0, vmc = parseFloat(measuredControlVelocity) || 0, vm = parseFloat(measuredVelocity) || 0, x = parseFloat(distanceX) || 0;
+        
+        let openingArea = (parseFloat(openingWidth) || 0) * (parseFloat(openingHeight) || 0);
+        let requiredQ = hoodType === 'enclosure' ? 60 * vc * openingArea : 60 * vc * (10 * Math.pow(x, 2) + area);
+        const currentQ = 60 * vm * area;
+
+        const isVelocityGood = vmc >= vc;
+        const isVolumeGood = currentQ >= requiredQ;
+        const isGood = isVelocityGood && isVolumeGood && currentQ > 0;
+
+        return { 
+          area: area.toFixed(3), openingArea: openingArea.toFixed(3), 
+          requiredQ: requiredQ.toFixed(2), currentQ: currentQ.toFixed(2), 
+          isVelocityGood, isVolumeGood, isGood 
+        };
+      };
+
+      const hoodsData = useMemo(() => {
+        return nodes.filter(n => n.type === 'hood').map(n => {
+          const calc = calculateResult(n.data);
+          return { ...n, calc };
+        });
+      }, [nodes]);
+
       const fansData = useMemo(() => {
         return nodes.filter(n => n.type === 'fan').map(fan => {
           const connectedHoods = hoodsData.filter(h => h.data.manualFanName && h.data.manualFanName.trim() === fan.data.fanName.trim());
-          const sumReqQ = connectedHoods.reduce((sum, h) => sum + parseFloat(h.calc.requiredQ || 0), 0);
           const sumCurrentQ = connectedHoods.reduce((sum, h) => sum + parseFloat(h.calc.currentQ || 0), 0);
           
-          const rQ = parseFloat(fan.data.ratedQ) || 0;
-          const mQ = parseFloat(fan.data.measuredQ) || 0;
+          const rQ = parseFloat(fan.data.ratedQ) || 0, mQ = parseFloat(fan.data.measuredQ) || 0;
           const eff = rQ > 0 ? (mQ / rQ) * 100 : 0;
-          
+          const suctionRatio = mQ > 0 ? (sumCurrentQ / mQ) * 100 : (rQ > 0 ? (sumCurrentQ / rQ) * 100 : 0);
+
           let status = '-';
           if (rQ > 0 && mQ > 0) {
              if (eff >= 80) status = '양호';
              else if (eff >= 60) status = '미흡';
              else status = '불량';
           }
-          return { ...fan, calc: { connectedHoods, sumReqQ, sumCurrentQ, eff, status } };
+          return { ...fan, calc: { connectedHoods, sumCurrentQ, eff, suctionRatio, status } };
         });
       }, [nodes, hoodsData]);
 
       const selectedNode = nodes.find(n => n.id === selectedNodeId);
       const selectedNodeCalc = selectedNode?.type === 'hood' ? calculateResult(selectedNode.data) : null;
+      
+      const totalHoods = hoodsData.length, goodHoods = hoodsData.filter(h => h.calc.isGood).length, badHoods = totalHoods - goodHoods;
+      const pieDashArray = totalHoods > 0 ? (goodHoods / totalHoods) * 100 : 0;
+
+      const evaluatedFans = fansData.filter(f => f.calc.status !== '-');
+      const totalEvalFans = evaluatedFans.length;
+      const goodFans = evaluatedFans.filter(f => f.calc.status === '양호').length;
+      const fairFans = evaluatedFans.filter(f => f.calc.status === '미흡').length;
+      const badFans = evaluatedFans.filter(f => f.calc.status === '불량').length;
+      const fanGoodPct = totalEvalFans > 0 ? (goodFans / totalEvalFans) * 100 : 0;
+      const fanFairPct = totalEvalFans > 0 ? (fairFans / totalEvalFans) * 100 : 0;
 
       return (
-        <div className="flex flex-col lg:flex-row h-full pb-[60px] lg:pb-0 bg-slate-100 font-sans text-slate-800 overflow-hidden print:block print:h-auto print:overflow-visible print:bg-white print:pb-0">
+        <div className="flex flex-col h-screen bg-slate-100 font-sans text-slate-800 overflow-hidden print-force-block">
           
-          {/* ✅ PDF 변환 시 나타나는 로딩 오버레이 ✅ */}
-          {isGeneratingPdf && (
-            <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-              <SpinnerIcon className="w-12 h-12 mb-4 text-orange-500" />
-              <h2 className="text-xl font-bold">PDF 문서를 생성하고 있습니다...</h2>
-              <p className="text-sm text-slate-300 mt-2">잠시만 기다려주세요.</p>
+          {/* PDF 로딩 오버레이 */}
+          {isGeneratingPDF && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print-hide">
+              <div className="bg-white p-6 rounded-lg shadow-2xl flex flex-col items-center">
+                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <h3 className="text-lg font-bold text-slate-800">PDF 문서 생성 중...</h3>
+                <p className="text-sm text-slate-500 mt-2">잠시만 기다려주세요.</p>
+              </div>
             </div>
           )}
 
-          {/* 모바일 전용 하단 탭 바 */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex z-50 print:hidden pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-            <button onClick={() => setMobileTab('input')} className={`flex-1 pt-3 pb-2 text-center text-xs font-bold flex flex-col items-center justify-center transition-colors ${mobileTab === 'input' ? 'text-orange-600 bg-orange-50' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <FileCheckIcon className="w-5 h-5 mb-1" />
-              점검 입력
-            </button>
-            <button onClick={() => setMobileTab('report')} className={`flex-1 pt-3 pb-2 text-center text-xs font-bold flex flex-col items-center justify-center transition-colors ${mobileTab === 'report' ? 'text-orange-600 bg-orange-50' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <PrinterIcon className="w-5 h-5 mb-1" />
-              결과 보고서
-            </button>
+          {/* 파일 불러오기 숨김 Input */}
+          <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
+
+          {/* 전체 상단 헤더 (액션바) */}
+          <header className="flex-shrink-0 p-3 lg:p-4 bg-blue-800 text-white flex justify-between items-center z-20 print-hide">
+            <div>
+              <h1 className="text-base lg:text-lg font-black flex items-center gap-1.5 lg:gap-2">
+                <Activity className="w-4 h-4 lg:w-5 lg:h-5" /> 
+                <span className="hidden sm:inline">국소배기 자체검사 앱</span>
+                <span className="inline sm:hidden">국소배기 진단</span>
+                <span className="bg-blue-600 text-[10px] px-1.5 py-0.5 rounded">Expert</span>
+              </h1>
+            </div>
+            
+            <div className="flex gap-1 lg:gap-2">
+              <button onClick={() => fileInputRef.current.click()} className="p-2 bg-blue-700 hover:bg-blue-600 rounded text-white text-xs font-bold flex items-center gap-1 transition">
+                <Upload className="w-4 h-4"/><span className="hidden sm:inline">불러오기</span>
+              </button>
+              <button onClick={handleSaveFile} className="p-2 bg-blue-700 hover:bg-blue-600 rounded text-white text-xs font-bold flex items-center gap-1 transition">
+                <Download className="w-4 h-4"/><span className="hidden sm:inline">저장</span>
+              </button>
+              <button onClick={handleSharePDF} className="p-2 bg-blue-700 hover:bg-blue-600 rounded text-white text-xs font-bold flex items-center gap-1 transition">
+                <Share2 className="w-4 h-4"/><span className="hidden sm:inline">PDF 공유</span>
+              </button>
+              <button onClick={handlePrint} className="p-2 bg-blue-700 hover:bg-blue-600 rounded text-white text-xs font-bold flex items-center gap-1 transition">
+                <Printer className="w-4 h-4"/><span className="hidden sm:inline">출력</span>
+              </button>
+            </div>
+          </header>
+
+          {/* 모바일 하단/상단 탭 (핸드폰 사이즈 전용) */}
+          <div className="flex lg:hidden flex-shrink-0 bg-blue-900 text-white text-sm font-bold z-10 shadow-md print-hide">
+            <button onClick={() => setMobileTab('edit')} className={`flex-1 py-3 transition-colors ${mobileTab === 'edit' ? 'bg-blue-600 border-b-4 border-white' : 'text-blue-300'}`}>입력 및 도면</button>
+            <button onClick={() => setMobileTab('report')} className={`flex-1 py-3 transition-colors ${mobileTab === 'report' ? 'bg-blue-600 border-b-4 border-white' : 'text-blue-300'}`}>보고서 확인</button>
           </div>
 
-          {/* 좌측 패널 (입력 컨트롤) */}
-          <div className={`w-full lg:w-[450px] flex-shrink-0 bg-white border-r border-slate-200 shadow-xl z-10 flex-col h-full print:hidden ${mobileTab === 'input' ? 'flex' : 'hidden lg:flex'}`}>
-            <div className="p-3 sm:p-4 bg-orange-600 text-white flex justify-between items-center shadow-sm">
-              <div>
-                <h1 className="text-base sm:text-lg font-black flex items-center gap-1.5"><ChefHat className="w-5 h-5" /> 스마트 점검</h1>
-                <p className="text-orange-200 text-[10px] sm:text-xs mt-0.5">KOSHA W-26-2022 완벽 적용</p>
-              </div>
-              <div className="flex gap-1.5 sm:gap-2">
-                <label className="bg-orange-800 hover:bg-orange-700 p-2 rounded flex items-center justify-center gap-1 text-[11px] sm:text-xs font-bold shadow-sm transition-colors border border-orange-500 cursor-pointer">
-                  <UploadIcon className="w-4 h-4" /> <span className="hidden sm:inline">불러오기</span>
-                  <input type="file" accept=".json" className="hidden" onChange={handleLoad} />
-                </label>
-                <button onClick={handleSave} className="bg-orange-800 hover:bg-orange-700 p-2 rounded flex items-center justify-center gap-1 text-[11px] sm:text-xs font-bold shadow-sm transition-colors border border-orange-500">
-                  <SaveIcon className="w-4 h-4" /> <span className="hidden sm:inline">저장</span>
-                </button>
-                {/* 데스크탑 전용 출력/공유 버튼 모음 */}
-                <div className="hidden sm:flex gap-1.5">
-                  <button onClick={() => handlePdfAction('share')} className="bg-blue-600 hover:bg-blue-500 p-2 rounded flex items-center justify-center gap-1 text-xs font-bold shadow-sm transition-colors border border-blue-400">
-                    <SendIcon className="w-4 h-4" /> <span className="hidden lg:inline">PDF 공유/메일</span><span className="lg:hidden">공유</span>
-                  </button>
-                  <button onClick={() => window.print()} className="bg-orange-800 hover:bg-orange-700 p-2 rounded flex items-center justify-center gap-1 text-xs font-bold shadow-sm transition-colors border border-orange-500">
-                    <PrinterIcon className="w-4 h-4" /> 인쇄
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* 메인 작업 영역 */}
+          <div className="flex flex-1 overflow-hidden relative print-force-block">
+            
+            {/* 좌측 패널 (입력 및 도면 컨트롤) */}
+            <div className={`w-full lg:w-[400px] flex-shrink-0 bg-white lg:border-r border-slate-200 shadow-xl z-10 flex flex-col h-full overflow-y-auto print-hide ${mobileTab === 'edit' ? 'block' : 'hidden lg:flex'}`}>
               
-              {/* 1. 사업장 및 Layout 설정 */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm">
-                <h2 className="text-sm font-black text-slate-700 mb-3">1. 사업장 현황 및 레이아웃 설정</h2>
-                <div className="space-y-2 mb-3">
-                  <div className="relative">
-                    <FactoryIcon className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                    <input type="text" placeholder="사업장명 (예: 00학교 급식실)" 
-                      value={workplaceName} onChange={e => setWorkplaceName(e.target.value)}
-                      className="w-full pl-9 p-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700" />
+              <div className="p-5 space-y-6">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-400 mb-2">1. 기본 정보 설정</h2>
+                  <div className="space-y-2 mb-3">
+                    <div className="relative">
+                      <Factory className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+                      <input type="text" placeholder="사업장 명칭을 입력하세요" 
+                        value={factoryName} onChange={e => setFactoryName(e.target.value)}
+                        className="w-full pl-10 p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="text" placeholder="대표자 성명" 
+                        value={representativeName} onChange={e => setRepresentativeName(e.target.value)}
+                        className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-700" />
+                      <input type="text" placeholder="소재지(주소)" 
+                        value={address} onChange={e => setAddress(e.target.value)}
+                        className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-700" />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <input type="text" placeholder="대표자" 
-                      value={representative} onChange={e => setRepresentative(e.target.value)}
-                      className="w-1/3 p-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
-                    <input type="text" placeholder="소재지 (주소)" 
-                      value={location} onChange={e => setLocation(e.target.value)}
-                      className="w-2/3 p-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
+                  <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-slate-700">도면(Lay-out) 사용</span>
+                      <span className="text-[10px] text-slate-500">끄면 도면 없이 목록으로만 관리합니다</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={useLayout} onChange={e => {
+                        setUseLayout(e.target.checked);
+                        if (!e.target.checked) setTool('select');
+                      }} />
+                      <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-slate-600">도면(Lay-out) 직접 그리기</span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={useLayout} onChange={e => {
-                      setUseLayout(e.target.checked);
-                      if (!e.target.checked) setTool('select');
-                    }} />
-                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
-                  </label>
-                </div>
-                
+
+                <hr className="border-slate-100" />
+
                 {useLayout ? (
-                  <div className="grid grid-cols-4 gap-2">
-                    <button onClick={() => setTool('select')} className={`flex flex-col items-center py-2 rounded border transition-colors ${tool === 'select' ? 'bg-orange-100 text-orange-700 border-orange-300 shadow-inner' : 'bg-white hover:bg-slate-100 border-slate-200 shadow-sm'}`}>
-                      <MousePointer2 className="w-4 h-4 mb-1" /> <span className="text-[10px] font-bold">선택/수정</span>
-                    </button>
-                    <button onClick={() => setTool('fan')} className={`flex flex-col items-center py-2 rounded border transition-colors ${tool === 'fan' ? 'bg-orange-100 text-orange-700 border-orange-300 shadow-inner' : 'bg-white hover:bg-slate-100 border-slate-200 shadow-sm'}`}>
-                      <FanIcon className="w-4 h-4 mb-1" /> <span className="text-[10px] font-bold">송풍기</span>
-                    </button>
-                    <button onClick={() => setTool('hood')} className={`flex flex-col items-center py-2 rounded border transition-colors ${tool === 'hood' ? 'bg-orange-100 text-orange-700 border-orange-300 shadow-inner' : 'bg-white hover:bg-slate-100 border-slate-200 shadow-sm'}`}>
-                      <SquareIcon className="w-4 h-4 mb-1" /> <span className="text-[10px] font-bold">후드</span>
-                    </button>
-                    <button onClick={() => setTool('line')} className={`flex flex-col items-center py-2 rounded border transition-colors ${tool === 'line' ? 'bg-orange-100 text-orange-700 border-orange-300 shadow-inner' : 'bg-white hover:bg-slate-100 border-slate-200 shadow-sm'}`}>
-                      <MinusIcon className="w-4 h-4 mb-1" /> <span className="text-[10px] font-bold">배관</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button onClick={() => createHood()} className="flex-1 bg-white border border-slate-300 py-2 rounded shadow-sm text-xs font-bold hover:bg-slate-100 text-orange-600 transition-colors">+ 후드 추가</button>
-                    <button onClick={() => createFan()} className="flex-1 bg-white border border-slate-300 py-2 rounded shadow-sm text-xs font-bold hover:bg-slate-100 text-blue-600 transition-colors">+ 송풍기 추가</button>
-                  </div>
-                )}
-                
-                {!useLayout && (
-                  <div className="mt-3 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                    {nodes.map(n => (
-                      <button key={n.id} onClick={() => setSelectedNodeId(n.id)} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${selectedNodeId === n.id ? 'bg-slate-800 text-white border-slate-800 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-300 shadow-sm'}`}>
-                        {n.type === 'fan' ? <FanIcon className="w-3 h-3 inline mr-1" /> : <SquareIcon className="w-3 h-3 inline mr-1 text-orange-500" />}
-                        {n.type === 'fan' ? n.data.fanName : n.data.processName}
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-400 mb-2 flex justify-between items-center">
+                      2. Lay-out (도면) 도구
+                    </h2>
+                    <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <button onClick={() => setTool('select')} className={`flex flex-col items-center p-2 rounded transition-colors ${tool === 'select' ? 'bg-blue-100 text-blue-700 border-blue-300 border shadow-inner' : 'hover:bg-slate-200'}`}>
+                        <MousePointer2 className="w-5 h-5 mb-1" /> <span className="text-[10px] font-bold">선택/이동</span>
                       </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 2. 제원 입력 (후드 / 송풍기) */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm min-h-[350px]">
-                <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
-                  <h2 className="text-sm font-black text-slate-700">2. 설비 제원 및 측정결과 입력</h2>
-                  {(selectedNodeId || selectedEdgeId) && (
-                    <button onClick={deleteSelected} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-[10px] font-bold bg-red-50 px-2 py-1 rounded border border-red-200 transition-colors">
-                      <Trash2 className="w-3 h-3" /> 객체 삭제
-                    </button>
-                  )}
-                </div>
-
-                {!selectedNode ? (
-                  <div className="py-16 text-center text-slate-400 text-xs font-bold bg-white rounded-lg border border-dashed border-slate-300">
-                    <MousePointer2 className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    도면이나 상단 목록에서<br/>입력할 송풍기나 후드를 선택하세요.
-                  </div>
-                ) : selectedNode.type === 'fan' ? (
-                  <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                    <div>
-                      <label className="block text-[10px] font-bold mb-1 text-slate-600">송풍기 명칭 (자유입력)</label>
-                      <input type="text" value={selectedNode.data.fanName || ""} onChange={e => updateNodeData('fanName', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-[10px] font-bold mb-1 text-slate-600">송풍기 설치 사진</label>
-                      <label className="flex justify-center items-center gap-2 w-full p-2 border border-slate-300 rounded text-xs font-bold bg-white hover:bg-slate-50 cursor-pointer shadow-sm transition-colors">
-                        <CameraIcon className="w-4 h-4 text-slate-500" /> {selectedNode.data.photo ? "사진 변경" : "촬영 또는 첨부"}
-                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
-                      </label>
-                      {selectedNode.data.photo && (
-                        <div className="mt-2 relative w-24 h-16 rounded border border-slate-200 overflow-hidden shadow-sm">
-                          <img src={selectedNode.data.photo} className="w-full h-full object-cover" />
-                          <button onClick={() => updateNodeData('photo', null)} className="absolute top-0.5 right-0.5 bg-red-500/90 text-white rounded-full p-0.5 hover:bg-red-600"><XCircle className="w-3 h-3" /></button>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-                      <div className="col-span-2 text-xs font-bold text-slate-800 mb-1 border-b pb-1">명판 사양 (정격)</div>
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-slate-500">송풍량 (CMM)</label>
-                        <input type="number" step="0.1" value={selectedNode.data.ratedQ || ""} onChange={e => updateNodeData('ratedQ', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-slate-500">정압 (mmAq)</label>
-                        <input type="number" step="0.1" value={selectedNode.data.ratedSP || ""} onChange={e => updateNodeData('ratedSP', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-3 bg-blue-50 p-3 rounded-lg border border-blue-200 shadow-sm">
-                      <div className="col-span-2 text-xs font-black text-blue-800 mb-1 border-b border-blue-200 pb-1">현장 측정 결과</div>
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-blue-700">송풍량 (CMM)</label>
-                        <input type="number" step="0.1" value={selectedNode.data.measuredQ || ""} onChange={e => updateNodeData('measuredQ', e.target.value)} className="w-full p-2 border border-blue-300 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-blue-700">정압 (mmAq)</label>
-                        <input type="number" step="0.1" value={selectedNode.data.measuredSP || ""} onChange={e => updateNodeData('measuredSP', e.target.value)} className="w-full p-2 border border-blue-300 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
-                      </div>
+                      <button onClick={() => setTool('fan')} className={`flex flex-col items-center p-2 rounded transition-colors ${tool === 'fan' ? 'bg-blue-100 text-blue-700 border-blue-300 border shadow-inner' : 'hover:bg-slate-200'}`}>
+                        <Fan className="w-5 h-5 mb-1" /> <span className="text-[10px] font-bold">송풍기</span>
+                      </button>
+                      <button onClick={() => setTool('hood')} className={`flex flex-col items-center p-2 rounded transition-colors ${tool === 'hood' ? 'bg-blue-100 text-blue-700 border-blue-300 border shadow-inner' : 'hover:bg-slate-200'}`}>
+                        <Square className="w-5 h-5 mb-1" /> <span className="text-[10px] font-bold">후드</span>
+                      </button>
+                      <button onClick={() => setTool('line')} className={`flex flex-col items-center p-2 rounded transition-colors ${tool === 'line' ? 'bg-blue-100 text-blue-700 border-blue-300 border shadow-inner' : 'hover:bg-slate-200'}`}>
+                        <Minus className="w-5 h-5 mb-1" /> <span className="text-[10px] font-bold">직선(덕트)</span>
+                      </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                    
-                    <div className="bg-slate-800 p-3 rounded-lg text-white shadow-md">
-                      <label className="block text-[10px] font-bold mb-1 text-slate-300 flex items-center gap-1"><FileCheckIcon className="w-3 h-3"/> 연결할 송풍기 선택 (표 병합 및 연동)</label>
-                      <select value={selectedNode.data.manualFanName || ""} onChange={e => updateNodeData('manualFanName', e.target.value)} className="w-full p-1.5 border-b border-slate-500 bg-transparent text-sm font-bold outline-none focus:border-white transition-colors cursor-pointer">
-                        <option value="" className="text-slate-800">-- 송풍기 미지정 (단독) --</option>
-                        {nodes.filter(n => n.type === 'fan').map(f => <option key={f.id} value={f.data.fanName} className="text-slate-800">{f.data.fanName}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-slate-600">급식실 후드 종류</label>
-                        <select value={selectedNode.data.kHoodType} onChange={e => updateNodeData('kHoodType', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm font-bold outline-none bg-white focus:ring-2 focus:ring-orange-500 shadow-sm cursor-pointer">
-                          {Object.keys(KITCHEN_HOOD_TYPES).map(k => <option key={k} value={k}>{KITCHEN_HOOD_TYPES[k].label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-slate-600">상세 명칭 (공정명)</label>
-                        <input type="text" value={selectedNode.data.processName} onChange={e => updateNodeData('processName', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-orange-500 shadow-sm" />
-                      </div>
-                    </div>
-
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-bold mb-1 text-slate-600">후드 설치 사진</label>
-                      <label className="flex justify-center items-center gap-2 w-full p-2 border border-slate-300 rounded text-xs font-bold bg-white hover:bg-slate-50 cursor-pointer shadow-sm transition-colors">
-                        <CameraIcon className="w-4 h-4 text-slate-500" /> {selectedNode.data.photo ? "사진 변경" : "촬영 또는 첨부"}
-                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
-                      </label>
-                      {selectedNode.data.photo && (
-                        <div className="mt-2 relative w-24 h-16 rounded border border-slate-200 overflow-hidden shadow-sm">
-                          <img src={selectedNode.data.photo} className="w-full h-full object-cover" />
-                          <button onClick={() => updateNodeData('photo', null)} className="absolute top-0.5 right-0.5 bg-red-500/90 text-white rounded-full p-0.5 hover:bg-red-600"><XCircle className="w-3 h-3" /></button>
+                      <h2 className="text-sm font-bold text-slate-400 mb-2 flex justify-between items-center">
+                        2-1. 송풍기 목록
+                        <button onClick={() => createFan()} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold border border-indigo-300 hover:bg-indigo-200 transition-colors">+ 추가</button>
+                      </h2>
+                      <div className="grid grid-cols-2 gap-2">
+                        {nodes.filter(n => n.type === 'fan').map(n => (
+                          <button key={n.id} onClick={() => setSelectedNodeId(n.id)} className={`p-2 text-xs font-bold rounded border text-left truncate transition-colors ${selectedNodeId === n.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                            <Fan className="w-3 h-3 inline mr-1"/>{n.data.fanName}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-400 mb-2 flex justify-between items-center">
+                        2-2. 후드 목록
+                        <button onClick={() => createHood()} className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold border border-blue-300 hover:bg-blue-200 transition-colors">+ 추가</button>
+                      </h2>
+                      <div className="grid grid-cols-2 gap-2">
+                        {nodes.filter(n => n.type === 'hood').map(n => (
+                          <button key={n.id} onClick={() => setSelectedNodeId(n.id)} className={`p-2 text-xs font-bold rounded border text-left truncate transition-colors ${selectedNodeId === n.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                            {n.data.processName}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <hr className="border-slate-100" />
+
+                <div className="pb-10">
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-sm font-bold text-slate-400">3. 선택 객체 제원 입력</h2>
+                    {(selectedNodeId || selectedEdgeId) && (
+                      <button onClick={deleteSelected} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-xs font-bold bg-red-50 px-2 py-1 rounded transition-colors">
+                        <Trash2 className="w-3 h-3" /> 삭제
+                      </button>
+                    )}
+                  </div>
+
+                  {!selectedNode && !selectedEdgeId ? (
+                    <div className="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-6 text-center text-slate-400 text-sm">
+                      목록이나 도면에서<br/>송풍기 또는 후드를 선택해주세요.
+                    </div>
+                  ) : selectedEdgeId || (selectedNode && selectedNode.type === 'joint') ? (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 text-center text-slate-500 text-sm font-bold">
+                      {selectedEdgeId ? '배관(직선)이 선택되었습니다.' : '배관 조인트가 선택되었습니다.'}
+                    </div>
+                  ) : selectedNode.type === 'fan' ? (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                      <div>
+                        <label className="block text-xs font-bold mb-1">송풍기 명칭</label>
+                        <input type="text" value={selectedNode.data.fanName || ""} onChange={e => updateNodeData('fanName', e.target.value)}
+                               className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-indigo-500" />
+                      </div>
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                        <h3 className="text-xs font-bold text-slate-500 border-b pb-2">정격 사양 (명판 기준)</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold mb-1 text-slate-600">정격 송풍량 (CMM)</label>
+                            <input type="number" step="0.1" value={selectedNode.data.ratedQ || ""} onChange={e => updateNodeData('ratedQ', e.target.value)}
+                                   className="w-full p-2 border border-slate-300 rounded text-sm outline-none" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold mb-1 text-slate-600">정격 정압 (mmAq)</label>
+                            <input type="number" step="0.1" value={selectedNode.data.ratedSP || ""} onChange={e => updateNodeData('ratedSP', e.target.value)}
+                                   className="w-full p-2 border border-slate-300 rounded text-sm outline-none" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+                        <h3 className="text-xs font-bold text-indigo-800 border-b border-indigo-200 pb-2">현장 측정 결과</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold mb-1 text-indigo-700">측정 송풍량 (CMM)</label>
+                            <input type="number" step="0.1" value={selectedNode.data.measuredQ || ""} onChange={e => updateNodeData('measuredQ', e.target.value)}
+                                   className="w-full p-2 border border-indigo-300 rounded text-sm outline-none focus:border-indigo-500 bg-white" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold mb-1 text-indigo-700">측정 정압 (mmAq)</label>
+                            <input type="number" step="0.1" value={selectedNode.data.measuredSP || ""} onChange={e => updateNodeData('measuredSP', e.target.value)}
+                                   className="w-full p-2 border border-indigo-300 rounded text-sm outline-none focus:border-indigo-500 bg-white" />
+                          </div>
+                        </div>
+                      </div>
+                      {(() => {
+                        const fData = fansData.find(f => f.id === selectedNode.id);
+                        if (!fData || !fData.data.ratedQ) return null;
+                        return (
+                          <div className={`p-3 rounded border font-bold text-sm flex items-center justify-between ${fData.calc.status === '양호' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : fData.calc.status === '미흡' ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-red-50 border-red-300 text-red-700'}`}>
+                             <span>송풍기 종합 효율: {fData.calc.eff.toFixed(1)}%</span>
+                             <span>{fData.calc.status}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                      
+                      <div className="bg-indigo-50 p-2.5 rounded border border-indigo-200 shadow-sm mb-4">
+                        <label className="block text-[10px] font-bold mb-1 text-indigo-700">연결 송풍기 명칭 (입력 시 자동 그룹화)</label>
+                        <input 
+                          type="text" 
+                          list="fan-list" 
+                          placeholder="예: 송풍기-1 (미입력 시 미연결)" 
+                          value={selectedNode.data.manualFanName || ""} 
+                          onChange={e => updateNodeData('manualFanName', e.target.value)} 
+                          className="w-full p-2 border border-indigo-300 rounded text-sm font-bold outline-none bg-white text-indigo-900" 
+                        />
+                        <datalist id="fan-list">
+                          {nodes.filter(n => n.type === 'fan').map(f => <option key={f.id} value={f.data.fanName} />)}
+                        </datalist>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold mb-1">공정명</label>
+                        <input type="text" value={selectedNode.data.processName} onChange={e => updateNodeData('processName', e.target.value)}
+                          className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold mb-1">현장 사진</label>
+                        <div className="flex gap-2">
+                          <label className="flex-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded p-2 flex justify-center items-center gap-2 cursor-pointer transition-colors text-sm font-bold">
+                            <Camera className="w-4 h-4 text-slate-600" /> 촬영 또는 첨부
+                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
+                          </label>
+                        </div>
+                        {selectedNode.data.photo && (
+                          <div className="mt-2 relative rounded overflow-hidden border border-slate-200">
+                            <img src={selectedNode.data.photo} alt="현장" className="w-full h-32 object-cover" />
+                            <button onClick={() => updateNodeData('photo', null)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow"><XCircle className="w-4 h-4" /></button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold mb-1">후드 형식</label>
+                          <select value={selectedNode.data.hoodType} onChange={e => updateNodeData('hoodType', e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded text-xs outline-none bg-white">
+                            <option value="enclosure">포위식/부스식</option>
+                            <option value="ext_up">외부식 상방형</option>
+                            <option value="ext_side">외부식 측방형</option>
+                            <option value="ext_down">외부식 하방형</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold mb-1">물질 상태</label>
+                          <select value={selectedNode.data.materialState} onChange={e => updateNodeData('materialState', e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded text-xs outline-none bg-white">
+                            <option value="gas">가스상</option>
+                            <option value="particle">입자상</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className={`mt-2 p-2 rounded flex items-center gap-2 transition-colors ${selectedNode.data.hoodType === 'enclosure' ? 'bg-red-50 border border-red-200 cursor-pointer' : 'bg-slate-100 border border-slate-200 opacity-50 cursor-not-allowed'}`}>
+                        <input type="checkbox" id={`permit-${selectedNode.id}`} checked={selectedNode.data.isPermitted || false} onChange={e => updateNodeData('isPermitted', e.target.checked)} disabled={selectedNode.data.hoodType !== 'enclosure'}
+                          className={`w-4 h-4 rounded focus:ring-red-500 ${selectedNode.data.hoodType === 'enclosure' ? 'text-red-600 border-red-300' : 'text-slate-400 border-slate-300'}`} />
+                        <label htmlFor={`permit-${selectedNode.id}`} className={`text-xs font-bold select-none ${selectedNode.data.hoodType === 'enclosure' ? 'text-red-700 cursor-pointer' : 'text-slate-500 cursor-not-allowed'}`}>
+                          허가대상 유해물질 취급 (포위식 전용)
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 mt-4">
+                        <div>
+                          <label className="block text-xs font-bold mb-1 text-indigo-700">법정 제어풍속 (m/s)</label>
+                          <input type="number" step="0.1" value={selectedNode.data.controlVelocity} onChange={e => updateNodeData('controlVelocity', e.target.value)}
+                            className="w-full p-2 border border-indigo-300 rounded text-sm outline-none bg-indigo-50 text-indigo-900 font-bold" />
+                        </div>
+                        {selectedNode.data.hoodType !== 'enclosure' && (
+                          <div>
+                            <label className="block text-xs font-bold mb-1">제어거리 X (m)</label>
+                            <input type="number" step="0.1" value={selectedNode.data.distanceX} onChange={e => updateNodeData('distanceX', e.target.value)}
+                              className="w-full p-2 border border-slate-300 rounded text-sm outline-none" />
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedNode.data.hoodType === 'enclosure' && (
+                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <label className="block text-[10px] font-bold mb-2 text-blue-800">▶ 포위식 개구면 크기 (필요 배기량 산정용)</label>
+                          <div className="flex gap-2">
+                            <div className="flex-1 flex items-center gap-1">
+                              <input type="number" step="0.1" placeholder="가로" value={selectedNode.data.openingWidth || ""} onChange={e => updateNodeData('openingWidth', e.target.value)} className="w-full p-2 border border-blue-300 rounded text-sm outline-none bg-white" />
+                              <span className="text-xs font-bold text-blue-700">m</span>
+                            </div>
+                            <div className="flex-1 flex items-center gap-1">
+                              <input type="number" step="0.1" placeholder="세로" value={selectedNode.data.openingHeight || ""} onChange={e => updateNodeData('openingHeight', e.target.value)} className="w-full p-2 border border-blue-300 rounded text-sm outline-none bg-white" />
+                              <span className="text-xs font-bold text-blue-700">m</span>
+                            </div>
+                          </div>
                         </div>
                       )}
-                    </div>
+                      
+                      <div className="mt-4">
+                        <label className="block text-xs font-bold mb-1 text-emerald-700">▶ 현장 측정 제어풍속 (m/s)</label>
+                        <input type="number" step="0.1" placeholder="현장에서 측정한 제어풍속" value={selectedNode.data.measuredControlVelocity} onChange={e => updateNodeData('measuredControlVelocity', e.target.value)}
+                          className="w-full p-2 border-2 border-emerald-400 rounded text-sm outline-none bg-emerald-50 text-emerald-900 font-bold" />
+                      </div>
 
-                    <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-3">
-                      <div className="text-xs font-bold text-slate-800 border-b pb-1">후드 상세 규격 (m)</div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex items-center gap-1">
-                          <input type="number" step="0.1" placeholder="가로폭(W)" value={selectedNode.data.width} onChange={e => updateNodeData('width', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-orange-500" /> <span className="text-[10px] text-slate-400">m</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <input type="number" step="0.1" placeholder="세로폭(H)" value={selectedNode.data.height} onChange={e => updateNodeData('height', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-orange-500" /> <span className="text-[10px] text-slate-400">m</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <input type="number" step="0.1" placeholder="내부 깊이" value={selectedNode.data.hoodDepth} onChange={e => updateNodeData('hoodDepth', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-orange-500" /> <span className="text-[10px] text-slate-400">m</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <input type="number" step="0.1" placeholder="조리대 기준 높이" value={selectedNode.data.hoodBottomHeight} onChange={e => updateNodeData('hoodBottomHeight', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-orange-500" /> <span className="text-[10px] text-slate-400">m</span>
-                        </div>
-                      </div>
-                      <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-3">
-                        <div className="flex items-center gap-1">
-                          <input type="number" step="0.1" placeholder="조리대 가로폭" value={selectedNode.data.equipWidth} onChange={e => updateNodeData('equipWidth', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-xs outline-none bg-slate-50 focus:bg-white" /> <span className="text-[9px] text-slate-400">m</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <input type="number" step="0.1" placeholder="조리대 세로폭" value={selectedNode.data.equipHeight} onChange={e => updateNodeData('equipHeight', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-xs outline-none bg-slate-50 focus:bg-white" /> <span className="text-[9px] text-slate-400">m</span>
-                        </div>
-                      </div>
                       <div className="pt-2">
-                        <label className="block text-[10px] font-bold mb-1 text-slate-600">설치된 덕트(가지관) 개수</label>
-                        <input type="number" min="1" step="1" value={selectedNode.data.ductCount || "1"} onChange={e => updateNodeData('ductCount', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-orange-500" />
-                      </div>
-                    </div>
+                        <h2 className="text-sm font-bold text-slate-400 mb-3 border-t border-slate-200 pt-4">4. 현재 배기량 산정 (덕트 등 측정부)</h2>
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                          <div className="flex gap-4">
+                            <label className="text-xs font-bold flex items-center gap-1 cursor-pointer">
+                              <input type="radio" checked={selectedNode.data.shape === 'rect'} onChange={() => updateNodeData('shape', 'rect')} /> 사각형
+                            </label>
+                            <label className="text-xs font-bold flex items-center gap-1 cursor-pointer">
+                              <input type="radio" checked={selectedNode.data.shape === 'circle'} onChange={() => updateNodeData('shape', 'circle')} /> 원형
+                            </label>
+                          </div>
+                          
+                          {selectedNode.data.shape === 'rect' ? (
+                            <div className="flex gap-4">
+                              <div className="flex-1 flex items-center gap-2"><input type="number" step="0.1" placeholder="가로" value={selectedNode.data.width} onChange={e => updateNodeData('width', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none" /><span className="text-slate-500 font-bold text-sm">m</span></div>
+                              <div className="flex-1 flex items-center gap-2"><input type="number" step="0.1" placeholder="세로" value={selectedNode.data.height} onChange={e => updateNodeData('height', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none" /><span className="text-slate-500 font-bold text-sm">m</span></div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2"><input type="number" step="1" placeholder="직경" value={selectedNode.data.diameter} onChange={e => updateNodeData('diameter', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none" /><span className="text-slate-500 font-bold text-sm">mm</span></div>
+                          )}
 
-                    <div className="grid grid-cols-2 gap-3 bg-orange-50 p-3 rounded-lg border border-orange-200 shadow-sm">
-                      <div className="col-span-2 text-xs font-black text-orange-800 mb-1 border-b border-orange-200 pb-1">풍속 결과 (m/s)</div>
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-orange-700">기준 면속도 (법정)</label>
-                        <input type="number" step="0.1" value={selectedNode.data.controlVelocity} onChange={e => updateNodeData('controlVelocity', e.target.value)} className="w-full p-2 border border-orange-300 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-orange-500 bg-white" />
+                          <div>
+                            <label className="block text-[10px] font-bold mb-1 text-blue-700">▶ 배기량 산출용 측정 풍속 (m/s)</label>
+                            <input type="number" step="0.1" placeholder="개구면/덕트 내 측정 풍속" value={selectedNode.data.measuredVelocity} onChange={e => updateNodeData('measuredVelocity', e.target.value)}
+                              className="w-full p-2 border border-blue-300 rounded text-sm outline-none bg-white" />
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-bold mb-1 text-orange-700">후드 면 측정 풍속</label>
-                        <input type="number" step="0.1" value={selectedNode.data.measuredVelocity} onChange={e => {
-                          updateNodeData('measuredVelocity', e.target.value);
-                        }} className="w-full p-2 border-2 border-orange-400 rounded text-sm font-black outline-none focus:border-orange-600 bg-white text-orange-900" />
-                      </div>
-                    </div>
 
-                    <div className="mt-2">
-                      <label className="block text-[10px] font-bold mb-1 text-slate-700">특이사항 (수동 비고란)</label>
-                      <input type="text" placeholder="결과표 비고란에 출력됩니다" value={selectedNode.data.remarks || ""} onChange={e => updateNodeData('remarks', e.target.value)} className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-1 focus:ring-orange-500 shadow-sm" />
-                    </div>
-
-                    {selectedNodeCalc && (
-                      <div className={`p-2.5 rounded-lg border font-bold text-xs flex justify-between shadow-sm transition-colors ${selectedNodeCalc.isGood ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-red-50 text-red-700 border-red-300'}`}>
-                        <span>필요 배기량: {selectedNodeCalc.requiredQ} CMM</span>
-                        <span>현재 배기량: {selectedNodeCalc.currentQ} CMM</span>
+                        {selectedNodeCalc && (
+                          <div className={`p-3 rounded border font-bold text-sm flex items-center justify-between ${selectedNodeCalc.isGood ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-red-50 border-red-300 text-red-700'}`}>
+                            <span className="flex items-center gap-1">
+                              {selectedNodeCalc.isGood ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                              {selectedNodeCalc.isGood ? '풍속 및 배기량 만족' : '기준 미달 (개선 필요)'}
+                            </span>
+                            <span>{selectedNodeCalc.currentQ} CMM</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-
-              {/* 3. 시설 종합 점검표 수동/자동 혼합 입력 */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm">
-                <h2 className="text-sm font-black text-slate-700 mb-3 flex items-center gap-1"><FileCheckIcon className="w-4 h-4"/> 1-4 종합 평가표 (자동 판정 연동)</h2>
-                <div className="space-y-4">
-                  <div className="border border-slate-200 bg-white rounded-lg p-3 shadow-sm hover:border-slate-300 transition-colors">
-                    <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-700">후드 적정크기 <span className="font-normal text-[8px] text-blue-500 bg-blue-50 px-1 rounded">(자동)</span></span>
-                      <span className={`text-xs font-black px-2 py-0.5 rounded ${evalData.sizeStatus === '양호' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>{evalData.sizeStatus}</span>
-                    </div>
-                    {evalData.sizeStatus === '미흡' && <div className="text-[10px] font-bold text-red-500 mb-2 leading-tight bg-red-50 p-1.5 rounded">{evalData.sizeTarget}</div>}
-                    <input type="text" placeholder="비고 (수동 추가)" value={checklist.size.remark} onChange={e => handleChecklistChange('size', 'remark', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] mb-1.5 outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                    <input type="text" placeholder="개선방향 (수동 입력)" value={checklist.size.improvement} onChange={e => handleChecklistChange('size', 'improvement', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                  </div>
-                  
-                  <div className="border border-slate-200 bg-white rounded-lg p-3 shadow-sm hover:border-slate-300 transition-colors">
-                    <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-700">덕트 연결/파손여부 <span className="font-normal text-[8px] text-blue-500 bg-blue-50 px-1 rounded">(간격 자동)</span></span>
-                      <span className={`text-xs font-black px-2 py-0.5 rounded ${evalData.ductStatus === '양호' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>{evalData.ductStatus}</span>
-                    </div>
-                    {evalData.ductStatus === '미흡' && <div className="text-[10px] font-bold text-red-500 mb-2 leading-tight bg-red-50 p-1.5 rounded">{evalData.ductTarget}</div>}
-                    <input type="text" placeholder="비고 (파손 여부 등 수동 기입)" value={checklist.duct.remark} onChange={e => handleChecklistChange('duct', 'remark', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] mb-1.5 outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                    <input type="text" placeholder="개선방향" value={checklist.duct.improvement} onChange={e => handleChecklistChange('duct', 'improvement', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                  </div>
-
-                  <div className="border border-slate-200 bg-white rounded-lg p-3 shadow-sm hover:border-slate-300 transition-colors">
-                    <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-700">후드 설치 높이 (1.2m 이내) <span className="font-normal text-[8px] text-blue-500 bg-blue-50 px-1 rounded">(자동)</span></span>
-                      <span className={`text-xs font-black px-2 py-0.5 rounded ${evalData.heightStatus === '양호' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>{evalData.heightStatus}</span>
-                    </div>
-                    {evalData.heightStatus === '미흡' && <div className="text-[10px] font-bold text-red-500 mb-2 leading-tight bg-red-50 p-1.5 rounded">{evalData.heightTarget}</div>}
-                    <input type="text" placeholder="비고 추가" value={checklist.height.remark} onChange={e => handleChecklistChange('height', 'remark', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] mb-1.5 outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                    <input type="text" placeholder="개선방향" value={checklist.height.improvement} onChange={e => handleChecklistChange('height', 'improvement', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                  </div>
-
-                  <div className="border border-slate-200 bg-white rounded-lg p-3 shadow-sm hover:border-slate-300 transition-colors">
-                    <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-700">제어풍속 기준 만족 <span className="font-normal text-[8px] text-blue-500 bg-blue-50 px-1 rounded">(자동)</span></span>
-                      <span className={`text-xs font-black px-2 py-0.5 rounded ${evalData.velStatus === '양호' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>{evalData.velStatus}</span>
-                    </div>
-                    {evalData.velStatus === '미흡' && <div className="text-[10px] font-bold text-red-500 mb-2 leading-tight bg-red-50 p-1.5 rounded">{evalData.velTarget}</div>}
-                    <input type="text" placeholder="비고 추가" value={checklist.velocity.remark} onChange={e => handleChecklistChange('velocity', 'remark', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] mb-1.5 outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                    <input type="text" placeholder="개선방향" value={checklist.velocity.improvement} onChange={e => handleChecklistChange('velocity', 'improvement', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                  </div>
-
-                  <div className="border border-slate-200 bg-white rounded-lg p-3 shadow-sm hover:border-slate-300 transition-colors">
-                    <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-700">필요 배기량 충족 여부 <span className="font-normal text-[8px] text-blue-500 bg-blue-50 px-1 rounded">(자동)</span></span>
-                      <span className={`text-xs font-black px-2 py-0.5 rounded ${evalData.volStatus === '양호' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>{evalData.volStatus}</span>
-                    </div>
-                    {evalData.volStatus === '미흡' && <div className="text-[10px] font-bold text-red-500 mb-2 leading-tight bg-red-50 p-1.5 rounded">{evalData.volTarget}</div>}
-                    <input type="text" placeholder="비고 추가" value={checklist.volume.remark} onChange={e => handleChecklistChange('volume', 'remark', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] mb-1.5 outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                    <input type="text" placeholder="개선방향" value={checklist.volume.improvement} onChange={e => handleChecklistChange('volume', 'improvement', e.target.value)} className="w-full p-2 border border-slate-200 rounded text-[10px] outline-none bg-slate-50 focus:bg-white focus:ring-1 focus:ring-orange-500 transition-all" />
-                  </div>
                 </div>
-              </div>
 
-              {/* 1-5. 점검자 종합 의견 (총평) */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm">
-                <h2 className="text-sm font-black text-slate-700 mb-3 flex items-center gap-1"><FileCheckIcon className="w-4 h-4"/> 1-5. 점검자 종합 의견 (총평)</h2>
-                <textarea
-                  value={overallReview}
-                  onChange={e => setOverallReview(e.target.value)}
-                  placeholder="점검 결과에 대한 종합적인 의견이나 특이사항을 자유롭게 작성해주세요."
-                  className="w-full p-3 border border-slate-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-500 bg-white h-24 resize-y leading-relaxed"
-                ></textarea>
-              </div>
+                <hr className="border-slate-100" />
 
-              {/* 하단 푸터 (좌측) */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-[10px] text-slate-400 font-bold space-y-1 mt-auto shadow-sm">
-                <div>ⓒ Copyright 2024. 2022582@kiha.or.kr All rights reserved.</div>
-                <div className="text-orange-600">점검 미흡 및 오류 시 010-2815-6044 이규연 문의</div>
-              </div>
+                {/* 4. 점검자 종합 의견 (총평) 입력 */}
+                <div className="pb-6">
+                  <h2 className="text-sm font-bold text-slate-400 mb-3">4. 점검자 종합 의견 (총평)</h2>
+                  <textarea
+                    value={overallReview}
+                    onChange={e => setOverallReview(e.target.value)}
+                    placeholder="사업장의 국소배기장치 성능 상태 및 개선 권고 사항을 자유롭게 작성해주세요."
+                    className="w-full p-3 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] resize-y bg-white"
+                  ></textarea>
+                </div>
 
-            </div>
-          </div>
-
-          {/* ============================================================== */}
-          {/* 우측 보고서 (A4 출력 영역) */}
-          {/* 모바일에서는 가로 스크롤 허용 및 고정 액션 바 추가 */}
-          {/* ============================================================== */}
-          <div className={`flex-1 bg-slate-200 flex-col relative print:bg-white print:block ${mobileTab === 'report' ? 'flex' : 'hidden lg:flex'}`}>
-            
-            {/* 모바일 전용 결과 보고서 상단 액션 바 (PDF 저장 및 공유) */}
-            <div className="lg:hidden flex-shrink-0 sticky top-0 left-0 right-0 z-10 p-3 bg-white border-b border-slate-300 flex justify-between items-center shadow-sm print:hidden">
-              <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                <PrinterIcon className="w-4 h-4 text-orange-600"/> 보고서
-              </span>
-              <div className="flex gap-1.5">
-                <button onClick={() => handlePdfAction('download')} className="bg-slate-700 hover:bg-slate-600 p-2 px-3 rounded flex items-center justify-center gap-1 text-xs font-bold text-white shadow-sm transition-colors">
-                  <DownloadIcon className="w-3.5 h-3.5" /> PDF 저장
-                </button>
-                <button onClick={() => handlePdfAction('share')} className="bg-blue-600 hover:bg-blue-500 p-2 px-3 rounded flex items-center justify-center gap-1 text-xs font-bold text-white shadow-sm transition-colors">
-                  <SendIcon className="w-3.5 h-3.5" /> 메일/공유
-                </button>
               </div>
             </div>
 
-            {/* 스크롤 가능한 보고서 본문 영역 (id="report-container" 필수) */}
-            <div className="flex-1 overflow-auto p-0 sm:p-4 lg:p-8 print:p-0 print:overflow-visible">
-              <div id="report-container" className="w-[800px] lg:w-full max-w-[210mm] min-h-[297mm] mx-auto bg-white shadow-2xl p-[10mm] sm:p-[15mm] print:w-auto print:max-w-none print:min-h-0 print:shadow-none print:p-0 print:m-0 flex flex-col transform origin-top-left">
+            {/* 우측 패널 (보고서 영역) */}
+            <div className={`flex-1 bg-slate-200 overflow-y-auto relative p-4 lg:p-8 print-force-block ${mobileTab === 'report' ? 'block' : 'hidden lg:block'}`}>
+              
+              {/* html2pdf가 타겟팅 할 감싸는 영역 */}
+              <div id="report-content-wrapper" className="w-full max-w-[210mm] min-h-[297mm] mx-auto bg-white shadow-2xl p-[15mm] sm:p-[20mm] print-force-block">
                 
                 <div className="border-b-4 border-slate-800 pb-4 mb-6 text-center relative page-break-inside-avoid">
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">국소배기장치 성능평가</h1>
-                  <div className="mt-2 text-[11px] font-bold text-slate-500">가이드라인 및 KOSHA W-26-2022 기준 적용 (본 결과는 법적 효력이 없으며 참고용입니다)</div>
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">국소배기장치 성능평가 보고서</h1>
+                  <p className="text-xs sm:text-sm text-slate-400 mt-2 font-bold">(본 결과는 법적 효력이 없으며 참고용입니다)</p>
                 </div>
 
                 {/* 사업장 현황 */}
-                <div className="mb-6 page-break-inside-avoid">
-                  <h2 className="text-sm font-black border-l-4 border-orange-500 pl-2 mb-2 text-slate-800">사업장 현황</h2>
-                  <table className="w-full border-collapse border border-slate-300 print-border text-xs text-left">
+                <div className="mb-8 page-break-inside-avoid">
+                  <h2 className="text-lg font-black border-l-4 border-slate-700 pl-2 mb-3">사업장 현황</h2>
+                  <table className="w-full border-collapse border border-slate-300 text-xs sm:text-sm">
                     <tbody>
                       <tr>
-                        <th className="border border-slate-300 print-border p-2 bg-slate-100 print:bg-slate-100 w-24 text-center font-bold">사업장명</th>
-                        <td className="border border-slate-300 print-border p-2 font-bold text-slate-800">{workplaceName || '-'}</td>
-                        <th className="border border-slate-300 print-border p-2 bg-slate-100 print:bg-slate-100 w-24 text-center font-bold">대표자</th>
-                        <td className="border border-slate-300 print-border p-2 text-slate-800">{representative || '-'}</td>
+                        <th className="bg-slate-100 border border-slate-300 p-2 w-[20%] text-center font-bold text-slate-700">사업장명</th>
+                        <td className="border border-slate-300 p-2 w-[30%] text-center font-bold text-slate-900">{factoryName || "미입력"}</td>
+                        <th className="bg-slate-100 border border-slate-300 p-2 w-[20%] text-center font-bold text-slate-700">대표자</th>
+                        <td className="border border-slate-300 p-2 w-[30%] text-center font-bold text-slate-900">{representativeName || "미입력"}</td>
                       </tr>
                       <tr>
-                        <th className="border border-slate-300 print-border p-2 bg-slate-100 print:bg-slate-100 text-center font-bold">소재지</th>
-                        <td colSpan="3" className="border border-slate-300 print-border p-2 text-slate-800">{location || '-'}</td>
+                        <th className="bg-slate-100 border border-slate-300 p-2 text-center font-bold text-slate-700">소재지</th>
+                        <td colSpan="3" className="border border-slate-300 p-2 font-bold text-slate-900 text-center">{address || "미입력"}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
 
-                {/* 1-1 Lay-out */}
+                {/* 도면 렌더링 */}
                 {useLayout && (
-                  <div className="mb-6 print:mb-6 page-break-inside-avoid">
-                    <h2 className="text-sm font-black border-l-4 border-orange-500 pl-2 mb-2 text-slate-800">1-1. 공정 Lay-out</h2>
-                    <div className="w-full h-[300px] border-2 border-slate-300 print-border relative overflow-hidden rounded-md print:rounded-none">
-                      <svg ref={svgRef} className={`w-full h-full bg-[#f8fafc] print:bg-white touch-none ${tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'}`}
-                           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
-                        <defs>
-                          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                            <circle cx="10" cy="10" r="1" fill="#cbd5e1" className="print:hidden"/>
-                          </pattern>
-                        </defs>
-                        <rect width="100%" height="100%" fill="url(#grid)" className="print:hidden" />
-                        
-                        {guides.map((g, i) => (
-                          g.axis === 'x' 
-                            ? <line key={`gx-${i}`} x1={g.value} y1="0" x2={g.value} y2="2000" stroke="#f97316" strokeWidth="1" strokeDasharray="4,4" className="pointer-events-none print:hidden" />
-                            : <line key={`gy-${i}`} x1="0" y1={g.value} x2="2000" y2={g.value} stroke="#f97316" strokeWidth="1" strokeDasharray="4,4" className="pointer-events-none print:hidden" />
-                        ))}
-
+                  <div className="mb-8 print:mb-6 page-break-inside-avoid">
+                    <h2 className="text-lg font-black border-l-4 border-blue-600 pl-2 mb-3">1. 공정 Lay-out</h2>
+                    <div className={`w-full h-[300px] sm:h-[400px] bg-slate-50 border-2 ${tool === 'select' ? 'border-slate-300' : 'border-blue-400 border-dashed'} rounded-xl relative overflow-hidden print:border-slate-300 print:bg-white print:border-solid`}>
+                      <svg ref={svgRef} className={`touch-none-svg w-full h-full ${tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'}`}
+                           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp}>
+                        <defs><pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1" fill="#cbd5e1" className="print:hidden"/></pattern></defs>
+                        {/* data-html2canvas-ignore="true" 로 PDF/인쇄에 제외될 요소 명시 */}
+                        <rect width="100%" height="100%" fill="url(#grid)" className="print:hidden" data-html2canvas-ignore="true" />
                         {edges.map(e => {
-                          const fromNode = nodes.find(n => n.id === e.from);
-                          const toNode = nodes.find(n => n.id === e.to);
+                          const fromNode = nodes.find(n => n.id === e.from), toNode = nodes.find(n => n.id === e.to);
                           if(!fromNode || !toNode) return null;
                           const isSelected = selectedEdgeId === e.id;
                           return (
                             <g key={e.id}>
-                              <line x1={fromNode.x} y1={fromNode.y} x2={toNode.x} y2={toNode.y} stroke="transparent" strokeWidth="20" className={tool === 'select' ? "cursor-pointer print:hidden" : "pointer-events-none print:hidden"} onPointerDown={(ev) => handleEdgePointerDown(ev, e.id)} />
-                              <line x1={fromNode.x} y1={fromNode.y} x2={toNode.x} y2={toNode.y} stroke={isSelected ? "#f97316" : "#475569"} strokeWidth={isSelected ? "4" : "3"} strokeLinecap="round" className="pointer-events-none" />
+                              <line x1={fromNode.x} y1={fromNode.y} x2={toNode.x} y2={toNode.y} stroke="transparent" strokeWidth="20" className={tool === 'select' ? "cursor-move print:hidden" : "pointer-events-none"} data-html2canvas-ignore="true" onPointerDown={(ev) => handleEdgePointerDown(ev, e.id)} />
+                              <line x1={fromNode.x} y1={fromNode.y} x2={toNode.x} y2={toNode.y} stroke={isSelected ? "#3b82f6" : "#475569"} strokeWidth="4" strokeLinecap="round" className="pointer-events-none" />
                             </g>
                           );
                         })}
-
                         {drawingEdge && (
-                          <g className="pointer-events-none print:hidden">
+                          <g className="pointer-events-none" data-html2canvas-ignore="true">
                             {drawingEdge.cornerX !== null ? (
                               <>
-                                <line x1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.x} y1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.y} x2={drawingEdge.cornerX} y2={drawingEdge.cornerY} stroke="#f97316" strokeWidth="3" strokeDasharray="5,5" />
-                                <line x1={drawingEdge.cornerX} y1={drawingEdge.cornerY} x2={drawingEdge.x} y2={drawingEdge.y} stroke="#f97316" strokeWidth="3" strokeDasharray="5,5" />
+                                <line x1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.x} y1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.y} x2={drawingEdge.cornerX} y2={drawingEdge.cornerY} stroke="#3b82f6" strokeWidth="4" strokeDasharray="5,5" />
+                                <line x1={drawingEdge.cornerX} y1={drawingEdge.cornerY} x2={drawingEdge.x} y2={drawingEdge.y} stroke="#3b82f6" strokeWidth="4" strokeDasharray="5,5" />
                               </>
-                            ) : <line x1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.x} y1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.y} x2={drawingEdge.x} y2={drawingEdge.y} stroke="#f97316" strokeWidth="3" strokeDasharray="5,5" />}
-                            {drawingEdge.snapTarget && <circle cx={drawingEdge.x} cy={drawingEdge.y} r="6" fill="#f97316" />}
+                            ) : <line x1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.x} y1={nodes.find(n=>n.id===drawingEdge.startNodeId)?.y} x2={drawingEdge.x} y2={drawingEdge.y} stroke="#3b82f6" strokeWidth="4" strokeDasharray="5,5" />}
+                            {drawingEdge.snapTarget?.type === 'edge' && <circle cx={drawingEdge.x} cy={drawingEdge.y} r="6" fill="#ef4444" />}
+                            {drawingEdge.snapTarget?.type === 'node' && <circle cx={drawingEdge.x} cy={drawingEdge.y} r="14" fill="none" stroke="#ef4444" strokeWidth="2" />}
                           </g>
                         )}
-
                         {nodes.map(n => {
                           const isSelected = n.id === selectedNodeId;
-                          if (n.type === 'joint') return <circle key={n.id} cx={n.x} cy={n.y} r="6" fill={isSelected ? "#f97316" : "#94a3b8"} onPointerDown={(e) => handleNodePointerDown(e, n.id)} className={tool === 'select' ? "cursor-move hover:fill-orange-500 print:hidden" : "cursor-pointer print:hidden"} />;
+                          if (n.type === 'joint') return <circle key={n.id} cx={n.x} cy={n.y} r="10" fill="transparent" data-html2canvas-ignore="true" onPointerDown={(e) => handleNodePointerDown(e, n.id)} className={tool === 'select' ? "cursor-move hover:fill-blue-500/20 print:hidden" : "cursor-pointer print:hidden"} />;
                           
-                          const isHood = n.type === 'hood';
-                          const hoodCalc = isHood ? hoodsData.find(h => h.id === n.id)?.calc : null;
-                          const isHoodGood = isHood && hoodCalc?.isVelocityGood && n.data.measuredVelocity !== "";
+                          let rectFill = n.type === 'fan' ? '#e0e7ff' : (isSelected ? '#eff6ff' : '#ffffff');
+                          let rectStroke = isSelected ? '#3b82f6' : (n.type === 'fan' ? '#4f46e5' : '#94a3b8');
+                          let iconClass = n.type === 'fan' ? "text-indigo-700" : "text-blue-600";
+                          let textFill = n.type === 'fan' ? "fill-indigo-900" : "fill-slate-700";
 
-                          let rectFill = '#ffffff';
-                          let rectStroke = '#475569';
-                          let iconClass = 'text-slate-700';
-
-                          if (n.type === 'fan') {
-                            rectFill = isSelected ? '#e0e7ff' : '#f1f5f9';
-                            rectStroke = isSelected ? '#3b82f6' : '#475569';
-                            iconClass = isSelected ? "text-blue-600 print:text-slate-800" : "text-slate-700";
-                          } else {
-                            rectFill = isSelected ? (isHoodGood ? '#ecfdf5' : '#fff7ed') : '#ffffff';
-                            rectStroke = isSelected ? '#3b82f6' : (isHoodGood ? '#10b981' : '#f97316');
-                            iconClass = isSelected ? "text-blue-600 print:text-slate-800" : (isHoodGood ? "text-emerald-600 print:text-slate-800" : "text-orange-600 print:text-slate-800");
+                          // 후드 객체일 경우 계산 결과(isGood)에 따라 동적으로 색상 부여
+                          if (n.type === 'hood') {
+                            const hData = hoodsData.find(h => h.id === n.id);
+                            if (hData && hData.calc) {
+                              if (hData.calc.isGood) {
+                                rectFill = isSelected ? '#d1fae5' : '#ecfdf5'; // emerald (양호)
+                                rectStroke = isSelected ? '#059669' : '#34d399';
+                                iconClass = "text-emerald-600";
+                                textFill = "fill-emerald-800";
+                              } else {
+                                rectFill = isSelected ? '#fee2e2' : '#fef2f2'; // red (불량)
+                                rectStroke = isSelected ? '#dc2626' : '#f87171';
+                                iconClass = "text-red-500";
+                                textFill = "fill-red-800";
+                              }
+                            }
                           }
 
                           return (
-                            <g key={n.id} transform={`translate(${n.x - 12}, ${n.y - 12})`} onPointerDown={(e) => handleNodePointerDown(e, n.id)} className={tool === 'select' ? "cursor-pointer" : "cursor-default"}>
-                              <rect width="24" height="24" rx="4" fill={rectFill} stroke={rectStroke} strokeWidth={isSelected ? "2.5" : "1.5"} className="print:fill-white" />
+                            <g key={n.id} transform={`translate(${n.x - 12}, ${n.y - 12})`} onPointerDown={(e) => handleNodePointerDown(e, n.id)} className={tool === 'select' ? "cursor-move" : "cursor-pointer"}>
+                              <rect width="24" height="24" rx="4" fill={rectFill} stroke={rectStroke} strokeWidth={isSelected ? "2" : "1.5"} className="transition-colors duration-300" />
                               {n.type === 'fan' ? (
                                 <>
-                                  <FanIcon x="4" y="4" width="16" height="16" className={iconClass} />
-                                  <text x="12" y="-6" textAnchor="middle" className={`text-[9px] font-bold bg-white px-1 ${isSelected ? 'fill-blue-600 print:fill-slate-800' : 'fill-slate-800'}`}>{n.data.fanName}</text>
+                                  <Fan x="4" y="4" width="16" height="16" className={iconClass} />
+                                  <text x="12" y="-4" textAnchor="middle" className={`text-[10px] font-bold print:block drop-shadow-md ${textFill}`}>{n.data.fanName}</text>
                                 </>
                               ) : (
                                 <>
-                                  <SquareIcon x="4" y="4" width="16" height="16" className={iconClass} />
-                                  <text x="12" y="34" textAnchor="middle" className={`text-[9px] font-bold bg-white px-1 ${isSelected ? 'fill-blue-600 print:fill-slate-800' : 'fill-slate-800'}`}>{n.data.processName}</text>
+                                  <Square x="4" y="4" width="16" height="16" className={iconClass} />
+                                  <text x="12" y="34" textAnchor="middle" className={`text-[8px] font-bold print:block ${textFill}`}>{n.data.processName}</text>
                                 </>
                               )}
                             </g>
@@ -1018,37 +970,31 @@
                   </div>
                 )}
 
-                {/* 1-2. 후드 조사 결과 */}
-                <div className="mb-6">
-                  <div className="flex justify-between items-end border-l-4 border-orange-500 pl-2 mb-2 page-break-inside-avoid">
-                    <h2 className="text-sm font-black text-slate-800">1-2. 후드 조사 결과 & 필요 송풍량 산정</h2>
+                <div className="mb-8">
+                  <div className="flex justify-between items-end border-l-4 border-blue-600 pl-2 mb-3 page-break-inside-avoid">
+                    <h2 className="text-lg font-black">{useLayout ? '2.' : '1.'} 후드 배기 및 제어풍속 결과</h2>
                   </div>
                   {hoodsData.length === 0 ? (
-                    <div className="p-8 border border-dashed border-slate-300 text-center text-slate-400 text-xs rounded-md print:hidden bg-slate-50">등록된 후드가 없습니다. 좌측 패널에서 추가해주세요.</div>
+                    <div className="p-8 border border-slate-200 rounded-lg text-center text-slate-400 text-sm print:hidden">등록된 후드가 없습니다.</div>
                   ) : (
-                    <div className="overflow-hidden rounded-md border border-slate-300 print:border-none print-border">
-                      <table className="w-full border-collapse border border-slate-300 print-border text-[10px] text-center">
+                    <div className="overflow-x-auto print:overflow-visible">
+                      <table className="w-full border-collapse border border-slate-300 text-[10px] lg:text-xs">
                         <thead>
-                          <tr className="bg-slate-100 print:bg-slate-100 text-slate-800">
-                            <th className="border border-slate-300 print-border p-1.5 w-8">No</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-16">연결 송풍기</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-16">사진</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-14">후드<br/>종류</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-10">가로<br/>(m)</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-10">세로<br/>(m)</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-10">기준<br/>속도</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-12">측정<br/>속도</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-12">풍속<br/>판정</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-16">필요배기량<br/>(CMM)</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-16">현재배기량<br/>(CMM)</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-12">배기<br/>판정</th>
-                            <th className="border border-slate-300 print-border p-1.5 min-w-[80px]">비고 (수동)</th>
+                          <tr className="bg-slate-100 text-slate-700">
+                            <th className="border border-slate-300 p-2 text-center w-6 sm:w-8">No</th>
+                            <th className="border border-slate-300 p-2 text-center w-16 sm:w-24">연결 송풍기</th>
+                            <th className="border border-slate-300 p-2 text-center w-12 sm:w-16">사진</th>
+                            <th className="border border-slate-300 p-2 text-left">공정명 / 형식</th>
+                            <th className="border border-slate-300 p-2 text-center w-16 sm:w-24">제어풍속 (m/s)<br/><span className="text-[8px] sm:text-[9px] text-slate-500">측정 / 법정</span></th>
+                            <th className="border border-slate-300 p-2 text-center w-16 sm:w-24">배기량 (CMM)<br/><span className="text-[8px] sm:text-[9px] text-slate-500">현재 / 필요</span></th>
+                            <th className="border border-slate-300 p-2 text-center w-10 sm:w-14">판정</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(() => {
                             let globalIdx = 1;
                             const rows = [];
+                            
                             const groupedHoods = {};
                             const unassignedHoods = [];
 
@@ -1065,32 +1011,38 @@
                             Object.keys(groupedHoods).forEach(fanName => {
                               const hoodsInGroup = groupedHoods[fanName];
                               hoodsInGroup.forEach((hood, hIdx) => {
+                                const { data, calc } = hood;
+                                const typeLabel = data.hoodType === 'enclosure' ? '포위식' : data.hoodType === 'ext_up' ? '외부 상방' : data.hoodType === 'ext_side' ? '외부 측방' : '외부 하방';
+                                const permitLabel = (data.hoodType === 'enclosure' && data.isPermitted) ? '(허가)' : '';
+                                
                                 rows.push(
-                                  <tr key={hood.id} className="page-break-inside-avoid hover:bg-slate-50 transition-colors">
-                                    <td className="border border-slate-300 print-border p-1">{globalIdx++}</td>
+                                  <tr key={hood.id} className={`${calc.isGood ? 'bg-white' : 'bg-red-50/30'} page-break-inside-avoid`}>
+                                    <td className="border border-slate-300 p-1 sm:p-2 text-center font-bold text-slate-500">{globalIdx++}</td>
+                                    
                                     {hIdx === 0 && (
-                                      <td rowSpan={hoodsInGroup.length} className="border border-slate-300 print-border p-1 align-middle font-black text-indigo-700 bg-indigo-50/50 print:bg-transparent print:text-slate-800">
+                                      <td rowSpan={hoodsInGroup.length} className="border border-slate-300 p-1 sm:p-2 text-center align-middle font-black text-indigo-700 bg-indigo-50/30">
                                         {fanName}
                                       </td>
                                     )}
-                                    <td className="border border-slate-300 print-border p-1 align-middle h-10">
-                                      {hood.data.photo ? <img src={hood.data.photo} className="w-14 h-9 object-cover mx-auto rounded border border-slate-200" alt="후드사진" /> : null}
+
+                                    <td className="border border-slate-300 p-1 text-center align-middle">
+                                      {data.photo ? <img src={data.photo} alt="현장" className="w-10 h-6 sm:w-12 sm:h-8 object-cover mx-auto rounded shadow-sm print:w-16 print:h-10" /> : <span className="text-[8px] sm:text-[9px] text-slate-400">없음</span>}
                                     </td>
-                                    <td className="border border-slate-300 print-border p-1 font-bold">{hood.data.processName}</td>
-                                    <td className="border border-slate-300 print-border p-1">{hood.data.width}</td>
-                                    <td className="border border-slate-300 print-border p-1">{hood.data.height}</td>
-                                    <td className="border border-slate-300 print-border p-1">{hood.data.controlVelocity}</td>
-                                    <td className="border border-slate-300 print-border p-1 font-bold text-orange-700 print:text-slate-800">{hood.data.measuredVelocity}</td>
-                                    <td className={`border border-slate-300 print-border p-1 font-black ${hood.calc.isVelocityGood ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>
-                                      {hood.calc.isVelocityGood ? '양호' : '미흡'}
+                                    <td className="border border-slate-300 p-1 sm:p-2">
+                                      <div className="font-bold text-slate-800">{data.processName}</div>
+                                      <div className="text-[9px] sm:text-[10px] text-slate-500 mt-0.5">
+                                        {typeLabel} <span className="text-red-500">{permitLabel}</span>
+                                        <div className="mt-1">{data.hoodType === 'enclosure' ? `개구 A=${calc.openingArea}㎡ | 측정부 A=${calc.area}㎡` : `측정부 A=${calc.area}㎡`}</div>
+                                      </div>
                                     </td>
-                                    <td className="border border-slate-300 print-border p-1">{hood.calc.requiredQ}</td>
-                                    <td className="border border-slate-300 print-border p-1 font-bold">{hood.calc.currentQ}</td>
-                                    <td className={`border border-slate-300 print-border p-1 font-black ${hood.calc.isVolumeGood ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>
-                                      {hood.calc.isVolumeGood ? '양호' : '미흡'}
+                                    <td className="border border-slate-300 p-1 sm:p-2 text-center">
+                                      <div className="flex flex-col items-center"><span className={`font-bold ${calc.isVelocityGood ? 'text-blue-600' : 'text-red-600'}`}>{data.measuredControlVelocity || '0'}</span><hr className="w-6 sm:w-8 my-0.5 border-slate-300" /><span className="text-slate-500">{data.controlVelocity || '0'}</span></div>
                                     </td>
-                                    <td className="border border-slate-300 print-border p-1 text-slate-600 print:text-slate-800 text-left pl-2 text-[9px] whitespace-pre-wrap leading-relaxed">
-                                      {hood.data.remarks}
+                                    <td className="border border-slate-300 p-1 sm:p-2 text-center">
+                                      <div className="flex flex-col items-center"><span className={`font-bold ${calc.isVolumeGood ? 'text-blue-600' : 'text-red-600'}`}>{calc.currentQ}</span><hr className="w-8 sm:w-10 my-0.5 border-slate-300" /><span className="text-slate-500">{calc.requiredQ}</span></div>
+                                    </td>
+                                    <td className="border border-slate-300 p-1 sm:p-2 text-center font-black">
+                                      {calc.isGood ? <span className="text-blue-600">양호</span> : <span className="text-red-600">불량</span>}
                                     </td>
                                   </tr>
                                 );
@@ -1098,28 +1050,33 @@
                             });
 
                             unassignedHoods.forEach(hood => {
+                              const { data, calc } = hood;
+                              const typeLabel = data.hoodType === 'enclosure' ? '포위식' : data.hoodType === 'ext_up' ? '외부 상방' : data.hoodType === 'ext_side' ? '외부 측방' : '외부 하방';
+                              const permitLabel = (data.hoodType === 'enclosure' && data.isPermitted) ? '(허가)' : '';
                               rows.push(
-                                <tr key={hood.id} className="page-break-inside-avoid hover:bg-slate-50 transition-colors">
-                                  <td className="border border-slate-300 print-border p-1">{globalIdx++}</td>
-                                  <td className="border border-slate-300 print-border p-1 align-middle font-bold text-slate-400 bg-slate-50/50 print:bg-transparent">미연결</td>
-                                  <td className="border border-slate-300 print-border p-1 align-middle h-10">
-                                    {hood.data.photo ? <img src={hood.data.photo} className="w-14 h-9 object-cover mx-auto rounded border border-slate-200" alt="후드사진" /> : null}
+                                <tr key={hood.id} className={`${calc.isGood ? 'bg-white' : 'bg-red-50/30'} page-break-inside-avoid`}>
+                                  <td className="border border-slate-300 p-1 sm:p-2 text-center font-bold text-slate-500">{globalIdx++}</td>
+                                  <td className="border border-slate-300 p-1 sm:p-2 text-center align-middle font-bold text-slate-400 bg-slate-50/50">
+                                    미연결
                                   </td>
-                                  <td className="border border-slate-300 print-border p-1 font-bold">{hood.data.processName}</td>
-                                  <td className="border border-slate-300 print-border p-1">{hood.data.width}</td>
-                                  <td className="border border-slate-300 print-border p-1">{hood.data.height}</td>
-                                  <td className="border border-slate-300 print-border p-1">{hood.data.controlVelocity}</td>
-                                  <td className="border border-slate-300 print-border p-1 font-bold text-orange-700 print:text-slate-800">{hood.data.measuredVelocity}</td>
-                                  <td className={`border border-slate-300 print-border p-1 font-black ${hood.calc.isVelocityGood ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>
-                                    {hood.calc.isVelocityGood ? '양호' : '미흡'}
+                                  <td className="border border-slate-300 p-1 text-center align-middle">
+                                    {data.photo ? <img src={data.photo} alt="현장" className="w-10 h-6 sm:w-12 sm:h-8 object-cover mx-auto rounded shadow-sm print:w-16 print:h-10" /> : <span className="text-[8px] sm:text-[9px] text-slate-400">없음</span>}
                                   </td>
-                                  <td className="border border-slate-300 print-border p-1">{hood.calc.requiredQ}</td>
-                                  <td className="border border-slate-300 print-border p-1 font-bold">{hood.calc.currentQ}</td>
-                                  <td className={`border border-slate-300 print-border p-1 font-black ${hood.calc.isVolumeGood ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>
-                                    {hood.calc.isVolumeGood ? '양호' : '미흡'}
+                                  <td className="border border-slate-300 p-1 sm:p-2">
+                                    <div className="font-bold text-slate-800">{data.processName}</div>
+                                    <div className="text-[9px] sm:text-[10px] text-slate-500 mt-0.5">
+                                      {typeLabel} <span className="text-red-500">{permitLabel}</span>
+                                      <div className="mt-1">{data.hoodType === 'enclosure' ? `개구 A=${calc.openingArea}㎡ | 측정부 A=${calc.area}㎡` : `측정부 A=${calc.area}㎡`}</div>
+                                    </div>
                                   </td>
-                                  <td className="border border-slate-300 print-border p-1 text-slate-600 print:text-slate-800 text-left pl-2 text-[9px] whitespace-pre-wrap leading-relaxed">
-                                    {hood.data.remarks}
+                                  <td className="border border-slate-300 p-1 sm:p-2 text-center">
+                                    <div className="flex flex-col items-center"><span className={`font-bold ${calc.isVelocityGood ? 'text-blue-600' : 'text-red-600'}`}>{data.measuredControlVelocity || '0'}</span><hr className="w-6 sm:w-8 my-0.5 border-slate-300" /><span className="text-slate-500">{data.controlVelocity || '0'}</span></div>
+                                  </td>
+                                  <td className="border border-slate-300 p-1 sm:p-2 text-center">
+                                    <div className="flex flex-col items-center"><span className={`font-bold ${calc.isVolumeGood ? 'text-blue-600' : 'text-red-600'}`}>{calc.currentQ}</span><hr className="w-8 sm:w-10 my-0.5 border-slate-300" /><span className="text-slate-500">{calc.requiredQ}</span></div>
+                                  </td>
+                                  <td className="border border-slate-300 p-1 sm:p-2 text-center font-black">
+                                    {calc.isGood ? <span className="text-blue-600">양호</span> : <span className="text-red-600">불량</span>}
                                   </td>
                                 </tr>
                               );
@@ -1133,184 +1090,159 @@
                   )}
                 </div>
 
-                {/* 1-3. 송풍기 조사 결과 */}
-                <div className="mb-6 page-break-inside-avoid">
-                  <div className="flex justify-between items-end border-l-4 border-orange-500 pl-2 mb-2">
-                    <h2 className="text-sm font-black text-slate-800">1-3. 송풍기 조사 결과</h2>
-                  </div>
-                  {fansData.length === 0 ? (
-                    <div className="p-8 border border-dashed border-slate-300 text-center text-slate-400 text-xs rounded-md print:hidden bg-slate-50">등록된 송풍기가 없습니다. 좌측 패널에서 추가해주세요.</div>
-                  ) : (
-                    <div className="rounded-md border border-slate-300 print:border-none print-border overflow-hidden">
-                      <table className="w-full border-collapse border border-slate-300 print-border text-[10px] text-center">
+                {fansData.length > 0 && (
+                  <div className="mb-8 page-break-inside-avoid">
+                    <div className="flex justify-between items-end border-l-4 border-indigo-600 pl-2 mb-3">
+                      <h2 className="text-lg font-black">{useLayout ? '3.' : '2.'} 송풍기 성능 및 시스템 밸런스 평가</h2>
+                    </div>
+                    <div className="overflow-x-auto print:overflow-visible">
+                      <table className="w-full border-collapse border border-slate-300 text-[10px] lg:text-xs">
                         <thead>
-                          <tr className="bg-slate-100 print:bg-slate-100 text-slate-800">
-                            <th className="border border-slate-300 print-border p-1.5 w-8">No</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-16">사진</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-24">송풍기 명칭</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-24">정격 송풍량 (CMM)</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-24">측정 송풍량 (CMM)</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-20">정압 (mmAq)</th>
-                            <th className="border border-slate-300 print-border p-1.5 w-16">효율</th>
-                            <th className="border border-slate-300 print-border p-1.5 min-w-[120px]">비고 (요구/현재 배기량 합산)</th>
+                          <tr className="bg-indigo-50 text-indigo-900 border-b-2 border-indigo-200">
+                            <th className="border border-slate-300 p-2 text-center w-8 sm:w-10">No</th>
+                            <th className="border border-slate-300 p-2 text-left">송풍기 명칭</th>
+                            <th className="border border-slate-300 p-2 text-center">정격 사양<br/><span className="text-[8px] sm:text-[9px] font-normal text-indigo-500">(풍량 CMM / 정압 mmAq)</span></th>
+                            <th className="border border-slate-300 p-2 text-center">현장 측정<br/><span className="text-[8px] sm:text-[9px] font-normal text-indigo-500">(풍량 CMM / 정압 mmAq)</span></th>
+                            <th className="border border-slate-300 p-2 text-center w-16 sm:w-24">후드 연결<br/><span className="text-[8px] sm:text-[9px] font-normal text-indigo-500">배기량 합계 / 흡입비</span></th>
+                            <th className="border border-slate-300 p-2 text-center w-14 sm:w-20">송풍기 효율<br/><span className="text-[8px] sm:text-[9px] font-normal text-indigo-500">종합 판정</span></th>
                           </tr>
                         </thead>
                         <tbody>
-                          {fansData.map((fan, idx) => (
-                            <tr key={fan.id} className="page-break-inside-avoid hover:bg-slate-50 transition-colors">
-                              <td className="border border-slate-300 print-border p-1">{idx + 1}</td>
-                              <td className="border border-slate-300 print-border p-1 align-middle h-10">
-                                {fan.data.photo ? <img src={fan.data.photo} className="w-14 h-9 object-cover mx-auto rounded border border-slate-200" alt="송풍기사진" /> : <span className="text-[9px] text-slate-400">없음</span>}
-                              </td>
-                              <td className="border border-slate-300 print-border p-1 font-bold text-indigo-700 print:text-slate-800">{fan.data.fanName}</td>
-                              <td className="border border-slate-300 print-border p-1">{fan.data.ratedQ}</td>
-                              <td className="border border-slate-300 print-border p-1 font-bold text-blue-700 print:text-slate-800">{fan.data.measuredQ}</td>
-                              <td className="border border-slate-300 print-border p-1">{fan.data.measuredSP}</td>
-                              <td className={`border border-slate-300 print-border p-1 font-black ${fan.calc.status === '양호' ? 'text-emerald-600 print:text-slate-800' : (fan.calc.status === '미흡' ? 'text-amber-600 print:text-slate-800' : 'text-red-600 print:text-slate-800')}`}>
-                                {fan.calc.eff > 0 ? `${fan.calc.eff.toFixed(0)}%` : '-'}
-                              </td>
-                              <td className="border border-slate-300 print-border p-1.5 text-left pl-3 text-[9px] text-slate-700 print:text-slate-800 leading-relaxed">
-                                필요배기량 합: <span className="font-bold">{fan.calc.sumReqQ.toFixed(1)}</span> CMM<br/>
-                                현재배기량 합: <span className="font-bold">{fan.calc.sumCurrentQ.toFixed(1)}</span> CMM<br/>
-                                <div className={`mt-1 font-bold inline-block px-1.5 py-0.5 rounded ${fan.calc.sumReqQ > 0 && fan.calc.sumCurrentQ >= fan.calc.sumReqQ ? 'bg-blue-50 text-blue-700 print:bg-transparent print:p-0 print:text-slate-800' : 'bg-red-50 text-red-700 print:bg-transparent print:p-0 print:text-slate-800'}`}>
-                                  (필요 송풍량의 약 {fan.calc.sumReqQ > 0 ? ((fan.calc.sumCurrentQ / fan.calc.sumReqQ) * 100).toFixed(0) : 0}% 만족)
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {fansData.map((fan, idx) => {
+                            const { data, calc } = fan;
+                            return (
+                              <tr key={fan.id} className={`${calc.status === '양호' ? 'bg-emerald-50/20' : calc.status === '미흡' ? 'bg-orange-50/20' : 'bg-red-50/20'} page-break-inside-avoid`}>
+                                <td className="border border-slate-300 p-1 sm:p-2 text-center font-bold text-slate-500">{idx + 1}</td>
+                                <td className="border border-slate-300 p-1 sm:p-2 font-black text-indigo-800">
+                                  {data.fanName}
+                                  <div className="text-[8px] sm:text-[9px] font-normal text-slate-500 mt-1">연결 후드: {calc.connectedHoods.length}개소</div>
+                                </td>
+                                <td className="border border-slate-300 p-1 sm:p-2 text-center font-bold text-slate-600">
+                                  {data.ratedQ || '-'} / {data.ratedSP || '-'}
+                                </td>
+                                <td className="border border-slate-300 p-1 sm:p-2 text-center font-bold text-indigo-700">
+                                  {data.measuredQ || '-'} / {data.measuredSP || '-'}
+                                </td>
+                                <td className="border border-slate-300 p-1 sm:p-2 text-center">
+                                  <div className="font-bold text-slate-800">{calc.sumCurrentQ.toFixed(1)} CMM</div>
+                                  <div className="text-[9px] sm:text-[10px] text-slate-500 mt-0.5">흡입비: {calc.suctionRatio.toFixed(1)}%</div>
+                                </td>
+                                <td className="border border-slate-300 p-1 sm:p-2 text-center">
+                                  <div className={`font-black text-xs sm:text-sm ${calc.status === '양호' ? 'text-emerald-600' : calc.status === '미흡' ? 'text-orange-500' : 'text-red-600'}`}>
+                                    {calc.eff > 0 ? `${calc.eff.toFixed(1)}%` : '-'}
+                                  </div>
+                                  <div className={`text-[9px] sm:text-[10px] inline-block font-bold mt-0.5 px-1.5 py-0.5 rounded ${calc.status === '양호' ? 'bg-emerald-100 text-emerald-700' : calc.status === '미흡' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                                    {calc.status}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* 1-4. 시설 종합 점검 */}
-                <div className="mb-6 page-break-inside-avoid">
-                  <div className="flex justify-between items-end border-l-4 border-orange-500 pl-2 mb-2">
-                    <h2 className="text-sm font-black text-slate-800">1-4. 종합 평가 <span className="text-xs text-blue-600 font-bold print:hidden">(자동 판별 연동)</span></h2>
-                  </div>
-                  <div className="rounded-md border border-slate-300 print:border-none print-border overflow-hidden">
-                    <table className="w-full border-collapse border border-slate-300 print-border text-[10px] text-center">
-                      <thead>
-                        <tr className="bg-slate-100 print:bg-slate-100 text-slate-800">
-                          <th className="border border-slate-300 print-border p-2 w-32">구 분</th>
-                          <th className="border border-slate-300 print-border p-2 w-16">적정유무</th>
-                          <th className="border border-slate-300 print-border p-2 min-w-[140px]">비 고 (판정 사유 및 수동 입력)</th>
-                          <th className="border border-slate-300 print-border p-2 min-w-[140px]">개 선 방 향</th>
-                        </tr>
-                      </thead>
-                      <tbody className="align-top">
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="border border-slate-300 print-border p-2 font-bold bg-slate-50/50 print:bg-transparent">후드 적정크기<br/><span className="font-normal text-[8px] text-slate-500">(돌출 15cm / 깊이 60cm↑)</span></td>
-                          <td className={`border border-slate-300 print-border p-2 font-black align-middle text-[11px] ${evalData.sizeStatus === '양호' ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>{evalData.sizeStatus}</td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">
-                            {evalData.sizeTarget && <div className="text-red-600 font-bold mb-1">{evalData.sizeTarget}</div>}
-                            {checklist.size.remark}
-                          </td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">{checklist.size.improvement}</td>
-                        </tr>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="border border-slate-300 print-border p-2 font-bold bg-slate-50/50 print:bg-transparent">덕트연결 및 파손여부<br/><span className="font-normal text-[8px] text-slate-500">(가로 1.8m 간격당 1개↑)</span></td>
-                          <td className={`border border-slate-300 print-border p-2 font-black align-middle text-[11px] ${evalData.ductStatus === '양호' ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>{evalData.ductStatus}</td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">
-                            {evalData.ductTarget && <div className="text-red-600 font-bold mb-1">{evalData.ductTarget}</div>}
-                            {checklist.duct.remark}
-                          </td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">{checklist.duct.improvement}</td>
-                        </tr>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="border border-slate-300 print-border p-2 font-bold bg-slate-50/50 print:bg-transparent">후드설치 높이<br/><span className="font-normal text-[8px] text-slate-500">(조리대에서 1.2m 이내)</span></td>
-                          <td className={`border border-slate-300 print-border p-2 font-black align-middle text-[11px] ${evalData.heightStatus === '양호' ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>{evalData.heightStatus}</td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">
-                            {evalData.heightTarget && <div className="text-red-600 font-bold mb-1">{evalData.heightTarget}</div>}
-                            {checklist.height.remark}
-                          </td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">{checklist.height.improvement}</td>
-                        </tr>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="border border-slate-300 print-border p-2 font-bold bg-slate-50/50 print:bg-transparent">제어풍속 기준만족<br/><span className="font-normal text-[8px] text-slate-500">(측정풍속 ≥ 요구풍속)</span></td>
-                          <td className={`border border-slate-300 print-border p-2 font-black align-middle text-[11px] ${evalData.velStatus === '양호' ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>{evalData.velStatus}</td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">
-                            {evalData.velTarget !== '전체 기준 만족' && <div className="text-red-600 font-bold mb-1">{evalData.velTarget}</div>}
-                            {checklist.velocity.remark}
-                          </td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">{checklist.velocity.improvement}</td>
-                        </tr>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="border border-slate-300 print-border p-2 font-bold bg-slate-50/50 print:bg-transparent">필요배기량 충족여부<br/><span className="font-normal text-[8px] text-slate-500">(현재배기량 ≥ 필요배기량)</span></td>
-                          <td className={`border border-slate-300 print-border p-2 font-black align-middle text-[11px] ${evalData.volStatus === '양호' ? 'text-blue-600 print:text-slate-800' : 'text-red-600 print:text-slate-800'}`}>{evalData.volStatus}</td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">
-                            {evalData.volTarget !== '전체 기준 만족' && <div className="text-red-600 font-bold mb-1">{evalData.volTarget}</div>}
-                            {checklist.volume.remark}
-                          </td>
-                          <td className="border border-slate-300 print-border p-2 text-left whitespace-pre-wrap leading-relaxed">{checklist.volume.improvement}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                {(hoodsData.length > 0 || fansData.length > 0) && (
+                  <div className="border-t-2 border-slate-800 pt-6 mt-6 page-break-inside-avoid">
+                    <h2 className="text-lg font-black border-l-4 border-blue-600 pl-2 mb-4">
+                      {useLayout ? (fansData.length > 0 ? '4.' : '3.') : (fansData.length > 0 ? '3.' : '2.')} 사업장 종합 평가
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-6">
+                      
+                      {hoodsData.length > 0 && (
+                        <div className="flex items-center justify-center gap-6">
+                          <div className="relative w-24 h-24 sm:w-28 sm:h-28 transform -rotate-90">
+                            <svg width="100%" height="100%" viewBox="0 0 36 36" className="drop-shadow-sm">
+                              <circle cx="18" cy="18" r="15.91549430918954" fill="transparent" stroke="#fca5a5" strokeWidth="6" />
+                              <circle cx="18" cy="18" r="15.91549430918954" fill="transparent" stroke="#3b82f6" strokeWidth="6" strokeDasharray={`${pieDashArray} ${100 - pieDashArray}`} strokeDashoffset="0" className="transition-all duration-1000 ease-out" />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center transform rotate-90">
+                              <span className="text-lg sm:text-xl font-black text-slate-700">{Math.round(pieDashArray)}%</span>
+                              <span className="text-[8px] sm:text-[9px] font-bold text-slate-500">후드 적합률</span>
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
+                              <div>
+                                <div className="text-xs font-bold text-slate-700">양호 후드</div>
+                                <div className="text-base sm:text-lg font-black text-blue-600">{goodHoods} <span className="text-[9px] sm:text-[10px] font-normal text-slate-500">개소</span></div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-red-300 rounded-sm"></div>
+                              <div>
+                                <div className="text-xs font-bold text-slate-700">불량 후드</div>
+                                <div className="text-base sm:text-lg font-black text-red-500">{badHoods} <span className="text-[9px] sm:text-[10px] font-normal text-slate-500">개소</span></div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                {/* 1-5. 종합 의견 (총평) */}
-                <div className="mb-6 page-break-inside-avoid">
-                  <div className="flex justify-between items-end border-l-4 border-orange-500 pl-2 mb-2">
-                    <h2 className="text-sm font-black text-slate-800">1-5. 점검자 종합 의견 (총평)</h2>
-                  </div>
-                  <div className="rounded-md border border-slate-300 print-border p-4 bg-white min-h-[80px] text-[11px] text-slate-800 whitespace-pre-wrap leading-relaxed">
-                    {overallReview || <span className="text-slate-400 italic">작성된 종합 의견이 없습니다.</span>}
-                  </div>
-                </div>
-
-                {/* 1-6. 참고 자료 섹션 */}
-                <div className="mb-4 page-break-inside-avoid flex-grow">
-                  <div className="flex justify-between items-end border-l-4 border-orange-500 pl-2 mb-3">
-                    <h2 className="text-sm font-black text-slate-800">1-6. 참고 자료 (KOSHA W-26-2022 가이드 요약)</h2>
-                  </div>
-                  <div className="bg-slate-50 print:bg-white border border-slate-300 print-border p-4 rounded-lg text-xs space-y-4">
-                    <div>
-                      <h3 className="font-bold text-orange-800 mb-2 flex items-center gap-1">▶ 조리기구별 개구면 권장 풍속표</h3>
-                      <table className="w-full border-collapse border border-slate-300 print-border text-center text-[10px] bg-white">
-                        <thead>
-                          <tr className="bg-slate-200 print:bg-slate-100 text-slate-800">
-                            <th className="border border-slate-300 print-border p-1.5">밥솥</th>
-                            <th className="border border-slate-300 print-border p-1.5">국솥</th>
-                            <th className="border border-slate-300 print-border p-1.5">조리대</th>
-                            <th className="border border-slate-300 print-border p-1.5">오븐</th>
-                            <th className="border border-slate-300 print-border p-1.5">세척기</th>
-                            <th className="border border-slate-300 print-border p-1.5">튀김/부침기</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td className="border border-slate-300 print-border p-1.5 font-bold">0.5 m/s</td>
-                            <td className="border border-slate-300 print-border p-1.5 font-bold">0.5 m/s</td>
-                            <td className="border border-slate-300 print-border p-1.5 font-bold text-orange-700 print:text-slate-800">0.7 m/s</td>
-                            <td className="border border-slate-300 print-border p-1.5 font-bold">0.5 m/s</td>
-                            <td className="border border-slate-300 print-border p-1.5 font-bold text-orange-700 print:text-slate-800">0.7 m/s</td>
-                            <td className="border border-slate-300 print-border p-1.5 font-bold text-orange-700 print:text-slate-800">0.7 m/s</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-orange-800 mb-2 flex items-center gap-1">▶ 후드 적정 크기 및 설치 기준</h3>
-                      <ul className="list-none text-[10px] text-slate-700 space-y-1.5 bg-white p-3 border border-slate-300 print-border rounded">
-                        <li className="flex items-start gap-1.5"><span className="text-orange-500 font-bold">✓</span> <div><strong>돌출폭:</strong> 처마는 조리기구 상부에서 바깥쪽으로 <span className="font-bold text-red-600 print:text-slate-800">최소 15cm 이상</span> 튀어나오게 설치하여 유해물질 누출 방지.</div></li>
-                        <li className="flex items-start gap-1.5"><span className="text-orange-500 font-bold">✓</span> <div><strong>내부 깊이:</strong> 포집 효율을 높이기 위해 후드 내부 깊이는 <span className="font-bold text-red-600 print:text-slate-800">최소 60cm 이상</span> 확보 권장.</div></li>
-                        <li className="flex items-start gap-1.5"><span className="text-orange-500 font-bold">✓</span> <div><strong>설치 높이:</strong> 하단부는 작업자 동선 방해 없이 조리대기구 상단면으로부터 <span className="font-bold text-red-600 print:text-slate-800">1.2m 이내</span>로 가깝게 설치.</div></li>
-                        <li className="flex items-start gap-1.5"><span className="text-orange-500 font-bold">✓</span> <div><strong>덕트 간격:</strong> 배기 불균형을 막기 위해 후드 가로폭 <span className="font-bold text-red-600 print:text-slate-800">1.8m 당 1개 이상</span>의 배기 덕트 설치 필수.</div></li>
-                      </ul>
+                      {fansData.length > 0 && (
+                        <div className={`flex items-center justify-center gap-4 ${hoodsData.length > 0 ? 'border-t md:border-t-0 print:border-t-0 md:border-l print:border-l border-slate-200 pt-6 md:pt-0 print:pt-0 pl-0 md:pl-4 print:pl-4' : ''}`}>
+                          <div className="relative w-24 h-24 sm:w-28 sm:h-28 transform -rotate-90">
+                            <svg width="100%" height="100%" viewBox="0 0 36 36" className="drop-shadow-sm">
+                              <circle cx="18" cy="18" r="15.91549430918954" fill="transparent" stroke="#fca5a5" strokeWidth="6" />
+                              <circle cx="18" cy="18" r="15.91549430918954" fill="transparent" stroke="#fb923c" strokeWidth="6" strokeDasharray={`${fanFairPct} ${100 - fanFairPct}`} strokeDashoffset={-fanGoodPct} className="transition-all duration-1000 ease-out" />
+                              <circle cx="18" cy="18" r="15.91549430918954" fill="transparent" stroke="#10b981" strokeWidth="6" strokeDasharray={`${fanGoodPct} ${100 - fanGoodPct}`} strokeDashoffset="0" className="transition-all duration-1000 ease-out" />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center transform rotate-90">
+                              <span className="text-lg sm:text-xl font-black text-slate-700">{totalEvalFans > 0 ? Math.round(fanGoodPct) : 0}%</span>
+                              <span className="text-[8px] sm:text-[9px] font-bold text-slate-500">송풍기 양호율</span>
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-emerald-500 rounded-sm"></div>
+                              <div>
+                                <div className="text-[9px] sm:text-[10px] font-bold text-slate-700">양호 (80%↑)</div>
+                                <div className="text-xs sm:text-sm font-black text-emerald-600">{goodFans} <span className="text-[8px] sm:text-[9px] font-normal text-slate-500">대</span></div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-orange-400 rounded-sm"></div>
+                              <div>
+                                <div className="text-[9px] sm:text-[10px] font-bold text-slate-700">미흡 (60~80%)</div>
+                                <div className="text-xs sm:text-sm font-black text-orange-500">{fairFans} <span className="text-[8px] sm:text-[9px] font-normal text-slate-500">대</span></div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-red-400 rounded-sm"></div>
+                              <div>
+                                <div className="text-[9px] sm:text-[10px] font-bold text-slate-700">불량 (60%↓)</div>
+                                <div className="text-xs sm:text-sm font-black text-red-500">{badFans} <span className="text-[8px] sm:text-[9px] font-normal text-slate-500">대</span></div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* ✅ 저작권 표시 및 연락처 (우측 출력본 하단) ✅ */}
-                <div className="mt-auto pt-4 text-center text-[10px] text-slate-400 font-bold border-t border-slate-300 print:mt-12 space-y-1 print:block hidden md:block">
-                  <div>ⓒ Copyright 2024. 2022582@kiha.or.kr All rights reserved.</div>
-                  <div className="text-orange-600">점검 미흡 및 오류 시 010-2815-6044 이규연 문의</div>
+                {/* 점검자 종합 의견 출력란 */}
+                <div className="border-t-2 border-slate-800 pt-6 mt-6 page-break-inside-avoid">
+                  <h2 className="text-lg font-black border-l-4 border-slate-700 pl-2 mb-4">
+                    {(() => {
+                      let idx = useLayout ? 1 : 0;
+                      idx++; // 후드 배기
+                      if (fansData.length > 0) idx++; // 송풍기
+                      if (hoodsData.length > 0 || fansData.length > 0) idx++; // 종합평가
+                      return ++idx;
+                    })()}. 점검자 종합 의견 (총평)
+                  </h2>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-6 min-h-[100px] whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                    {overallReview || <span className="text-slate-400">입력된 종합 의견이 없습니다.</span>}
+                  </div>
                 </div>
 
               </div>
             </div>
+
           </div>
         </div>
       );
