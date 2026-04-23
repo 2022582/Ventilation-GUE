@@ -278,7 +278,7 @@
             const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
             
-            const reportText = `[국소배기장치 성능평가 점검 결과 요약]\n- 사업장명: ${workplaceName || '미입력'}\n- 제어풍속 만족: ${evalData.velStatus}\n- 필요배기량 만족: ${evalData.volStatus}\n\n상세한 점검 결과는 첨부된 PDF 파일을 확인해주세요.`;
+            const reportText = `[단체급식시설 점검 결과 요약]\n- 사업장명: ${workplaceName || '미입력'}\n- 제어풍속 만족: ${evalData.velStatus}\n- 필요배기량 만족: ${evalData.volStatus}\n\n상세한 점검 결과는 첨부된 PDF 파일을 확인해주세요.`;
 
             // 브라우저가 파일 공유를 지원하는지 체크 (주로 모바일 환경)
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -942,7 +942,7 @@
               <div id="report-container" className="w-[800px] lg:w-full max-w-[210mm] min-h-[297mm] mx-auto bg-white shadow-2xl p-[10mm] sm:p-[15mm] print:w-auto print:max-w-none print:min-h-0 print:shadow-none print:p-0 print:m-0 flex flex-col transform origin-top-left">
                 
                 <div className="border-b-4 border-slate-800 pb-4 mb-6 text-center relative page-break-inside-avoid">
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">국소배기장치 성능평가</h1>
+                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">단체급식시설 점검</h1>
                   <div className="mt-2 text-[11px] font-bold text-slate-500">가이드라인 및 KOSHA W-26-2022 기준 적용 (본 결과는 법적 효력이 없으며 참고용입니다)</div>
                 </div>
 
